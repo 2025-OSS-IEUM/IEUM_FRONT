@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "IEUM-REONT",
-    "slug": "IEUM-REONT",
+    "name": "IEUM",
+    "slug": "ieum",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
