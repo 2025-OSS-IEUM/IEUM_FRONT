@@ -1,30 +1,18 @@
-import React from "react";
+import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { ThemeProvider } from "styled-components/native";
 import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
+import { Footer } from "./src/components";
+import { Home, Map, Profile } from "./src/pages";
 
-const Container = styled.View`
+type TabType = 'map' | 'home' | 'profile';
+
+const MainContainer = styled.View`
   flex: 1;
-  align-items: center;
-  justify-content: center;
   background-color: ${props => props.theme.colors.background};
-`;
-
-const Title = styled.Text`
-  font-size: 24px;
-  font-weight: bold;
-  font-family: ${props => props.theme.fonts.bold};
-  color: ${props => props.theme.colors.text.primary};
-  margin-bottom: 16px;
-`;
-
-const Subtitle = styled.Text`
-  font-size: 16px;
-  font-family: ${props => props.theme.fonts.primary};
-  color: ${props => props.theme.colors.text.secondary};
 `;
 
 export default function App() {
@@ -40,6 +28,25 @@ export default function App() {
     "Pretendard-Black": require("./assets/fonts/Pretendard-Black.otf"),
   });
 
+  const [activeTab, setActiveTab] = useState<TabType>('home');
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+  };
+
+  const renderPage = () => {
+    switch (activeTab) {
+      case 'map':
+        return <Map />;
+      case 'home':
+        return <Home />;
+      case 'profile':
+        return <Profile />;
+      default:
+        return <Home />;
+    }
+  };
+
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -50,11 +57,10 @@ export default function App() {
 
   return (
     <ThemeProvider theme={theme}>
-      <Container>
-        <Title>IEUM 플랫폼</Title>
-        <Subtitle>React Native Expo + TypeScript</Subtitle>
-        <Subtitle>Axios & Styled Components</Subtitle>
-      </Container>
+      <MainContainer>
+        {renderPage()}
+        <Footer initialTab={activeTab} onTabChange={handleTabChange} />
+      </MainContainer>
       <StatusBar style="auto" />
     </ThemeProvider>
   );
