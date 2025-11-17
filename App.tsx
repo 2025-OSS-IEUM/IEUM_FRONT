@@ -7,7 +7,7 @@ import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile, Report } from "./src/pages";
+import { Home, Map, Profile, Report, ReportDetails } from "./src/pages";
 
 type TabType = 'map' | 'home' | 'profile' | 'report';
 
@@ -30,23 +30,28 @@ export default function App() {
   });
 
   const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [showReportDetails, setShowReportDetails] = useState(false);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
   };
 
   const renderPage = () => {
+    if (showReportDetails) {
+      return <ReportDetails onNavigateBack={() => setShowReportDetails(false)} />;
+    }
+
     switch (activeTab) {
       case 'map':
         return <Map />;
       case 'home':
-        return <Home />;
+        return <Home onNavigateToReportDetails={() => setShowReportDetails(true)} />;
       case 'profile':
         return <Profile />;
       case 'report':
         return <Report onNavigateToHome={() => setActiveTab('home')} />;
       default:
-        return <Home />;
+        return <Home onNavigateToReportDetails={() => setShowReportDetails(true)} />;
     }
   };
 

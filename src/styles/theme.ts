@@ -41,6 +41,7 @@ export const theme = {
     md: 16,
     lg: 18,
     xl: 20,
+    xxl: 24,
   },
   sizes: {
     imageThumbnail: 100,
