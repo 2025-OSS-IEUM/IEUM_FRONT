@@ -1,12 +1,12 @@
-import React from 'react';
-import styled from 'styled-components/native';
+import React from "react";
+import styled from "styled-components/native";
 
 interface CustomTextProps {
   children: React.ReactNode;
   size?: number;
   color?: string;
-  weight?: 'normal' | 'bold' | '600' | '700';
-  align?: 'left' | 'center' | 'right';
+  weight?: "normal" | "bold" | "600" | "700";
+  align?: "left" | "center" | "right";
 }
 
 const StyledText = styled.Text<{
@@ -16,31 +16,30 @@ const StyledText = styled.Text<{
   align?: string;
 }>`
   font-size: ${(props) => props.size || 16}px;
-  color: ${(props) => props.color || '#000000'};
-  font-weight: ${(props) => props.weight || 'normal'};
-  text-align: ${(props) => props.align || 'left'};
+  color: ${(props) => props.color || "#000000"};
+  font-weight: ${(props) => props.weight || "normal"};
+  text-align: ${(props) => props.align || "left"};
   font-family: ${(props) => {
-    if (props.weight === 'bold' || props.weight === '700') {
+    if (props.weight === "bold" || props.weight === "700") {
       return props.theme.fonts.bold;
     }
-    if (props.weight === '600') {
+    if (props.weight === "600") {
       return props.theme.fonts.medium;
     }
     return props.theme.fonts.primary;
   }};
 `;
 
-export const CustomText: React.FC<CustomTextProps> = ({
+export const CustomText = ({
   children,
   size,
   color,
   weight,
   align,
-}) => {
+}: CustomTextProps) => {
   return (
     <StyledText size={size} color={color} weight={weight} align={align}>
       {children}
     </StyledText>
   );
 };
-
