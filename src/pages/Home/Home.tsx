@@ -24,20 +24,16 @@ export const Home = () => {
   return (
     <Container>
       <HomeContainer>
-        <Title size={24} weight="bold">
+        <Title
+          size={24}
+          weight="bold"
+        >
           홈 페이지
         </Title>
-        <Subtitle size={16}>
-          IEUM 플랫폼
-        </Subtitle>
-        <Subtitle size={16}>
-          React Native Expo + TypeScript
-        </Subtitle>
-        <Subtitle size={16}>
-          Axios & Styled Components
-        </Subtitle>
+        <CustomText size={16}>
+          홈 화면이 여기에 표시됩니다.
+        </CustomText>
       </HomeContainer>
     </Container>
   );
 };
-

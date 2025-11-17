@@ -2,13 +2,14 @@ import React, { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { ThemeProvider } from "styled-components/native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile } from "./src/pages";
+import { Home, Map, Profile, Report } from "./src/pages";
 
-type TabType = 'map' | 'home' | 'profile';
+type TabType = 'map' | 'home' | 'profile' | 'report';
 
 const MainContainer = styled.View`
   flex: 1;
@@ -42,6 +43,8 @@ export default function App() {
         return <Home />;
       case 'profile':
         return <Profile />;
+      case 'report':
+        return <Report onNavigateToHome={() => setActiveTab('home')} />;
       default:
         return <Home />;
     }
@@ -56,12 +59,14 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider theme={theme}>
-      <MainContainer>
-        {renderPage()}
-        <Footer initialTab={activeTab} onTabChange={handleTabChange} />
-      </MainContainer>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider theme={theme}>
+        <MainContainer>
+          {renderPage()}
+          <Footer initialTab={activeTab} onTabChange={handleTabChange} />
+        </MainContainer>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
