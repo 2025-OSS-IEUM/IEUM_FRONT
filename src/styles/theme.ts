@@ -12,10 +12,11 @@ export const theme = {
   },
   colors: {
     primary: "#68D0C6",
-    background: "#FFFFFF",
+    background: "#F5F5F5",
     text: {
-      primary: "#000000",
+      primary: "#4A4A4A",
       secondary: "#666666",
+      white: "#FFFFFF",
     },
   },
   spacing: {

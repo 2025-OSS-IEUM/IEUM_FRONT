@@ -5,7 +5,7 @@ interface CustomTextProps {
   children: React.ReactNode;
   size?: number;
   color?: string;
-  weight?: "normal" | "bold" | "600" | "700";
+  weight?: "normal" | "semibold" | "bold" | "300" | "600" | "700";
   align?: "left" | "center" | "right";
 }
 
@@ -23,8 +23,14 @@ const StyledText = styled.Text<{
     if (props.weight === "bold" || props.weight === "700") {
       return props.theme.fonts.bold;
     }
+    if (props.weight === "semibold") {
+      return props.theme.fonts.semiBold;
+    }
     if (props.weight === "600") {
       return props.theme.fonts.medium;
+    }
+    if (props.weight === "300") {
+      return props.theme.fonts.light;
     }
     return props.theme.fonts.primary;
   }};
