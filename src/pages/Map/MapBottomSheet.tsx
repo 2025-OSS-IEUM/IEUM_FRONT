@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Alert, Animated } from "react-native";
+import {
+  Platform,
+  Animated,
+  TouchableOpacity,
+  PanResponder,
+} from "react-native";
 import styled from "styled-components/native";
-import Svg, { Path, Defs, LinearGradient, Stop, Circle, Rect } from "react-native-svg";
+import Svg, {
+  Path,
+  Defs,
+  LinearGradient,
+  Stop,
+  Circle,
+} from "react-native-svg";
 import * as Location from "expo-location";
 import { theme } from "../../styles/theme";
 
@@ -10,10 +21,25 @@ interface MapBottomSheetProps {
   instruction?: string;
   onClose?: () => void;
   isPlaying?: boolean;
+  panY?: Animated.Value; // Map.tsx에서 공유받는 애니메이션 값
+  enableDrag?: boolean;
 }
 
+const bottomSheetShadow = Platform.select({
+  ios: {
+    shadowColor: "rgba(0, 0, 0, 0.1)",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+  },
+  android: {
+    elevation: 16,
+  },
+  default: {},
+});
+
 const BottomSheetContainer = styled.View`
-  width: 402px;
+  width: 100%;
   height: 419px;
   flex-shrink: 0;
   background-color: #ffffff;
@@ -23,14 +49,22 @@ const BottomSheetContainer = styled.View`
   position: relative;
 `;
 
-const CloseButton = styled.TouchableOpacity`
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  width: 24px;
-  height: 24px;
-  justify-content: center;
+const AnimatedBottomSheet =
+  Animated.createAnimatedComponent(BottomSheetContainer);
+
+const HandleBarWrapper = styled.View`
+  width: 100%;
+  height: 30px;
   align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+`;
+
+const HandleBar = styled.View`
+  width: 40px;
+  height: 4px;
+  background-color: #e0e0e0;
+  border-radius: 2px;
 `;
 
 const AudioWaveContainer = styled.View`
@@ -43,11 +77,12 @@ const AudioWaveContainer = styled.View`
   align-items: center;
   justify-content: center;
   gap: 2px;
+  pointer-events: none;
 `;
 
 const AudioBar = styled.View<{ height: number }>`
   width: 1px;
-  height: ${props => props.height}px;
+  height: ${(props) => props.height}px;
   background-color: #68d0c6;
   border-radius: 0.5px;
 `;
@@ -57,7 +92,7 @@ const DirectionContainer = styled.View`
   height: 150px;
   justify-content: center;
   align-items: center;
-  margin-top: 80px;
+  margin-top: 70px;
   margin-bottom: 30px;
   position: relative;
 `;
@@ -73,7 +108,7 @@ const ArrowWrapper = styled.View`
 const DestinationText = styled.Text`
   color: #a2a2a2;
   text-align: center;
-  font-family: ${props => props.theme.fonts.semiBold};
+  font-family: ${(props) => props.theme.fonts.semiBold};
   font-size: 20px;
   margin-bottom: 20px;
 `;
@@ -81,34 +116,91 @@ const DestinationText = styled.Text`
 const InstructionText = styled.Text`
   color: #4a4a4a;
   text-align: center;
-  font-family: ${props => props.theme.fonts.bold};
+  font-family: ${(props) => props.theme.fonts.bold};
   font-size: 24px;
 `;
 
-export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
+export const MapBottomSheet = ({
   destination = "국립한밭대학교 정문",
   instruction = "50걸음 직진 후 좌회전입니다",
   onClose,
   isPlaying = true,
-}) => {
+  panY: externalPanY,
+  enableDrag = true,
+}: MapBottomSheetProps) => {
   const [heading, setHeading] = useState<number | null>(null);
   const [barHeights, setBarHeights] = useState<number[]>([]);
   const animationInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // 외부에서 주입받은 panY가 없으면 내부에서 생성 (하위 호환성)
+  const internalPanY = useRef(new Animated.Value(0)).current;
+  const panY = externalPanY || internalPanY;
+
+  const COLLAPSED_Y = 360;
+  const isCollapsed = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return Math.abs(gestureState.dy) > 5;
+      },
+      onPanResponderGrant: () => {
+        panY.setOffset(isCollapsed.current ? COLLAPSED_Y : 0);
+        panY.setValue(0);
+      },
+      onPanResponderMove: (_, gestureState) => {
+        let nextValue = gestureState.dy;
+
+        if (isCollapsed.current) {
+          nextValue = Math.min(0, nextValue);
+          nextValue = Math.max(nextValue, -COLLAPSED_Y);
+        } else {
+          nextValue = Math.max(0, nextValue);
+          nextValue = Math.min(nextValue, COLLAPSED_Y);
+        }
+
+        panY.setValue(nextValue);
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        panY.flattenOffset();
+        const currentY =
+          (isCollapsed.current ? COLLAPSED_Y : 0) + gestureState.dy;
+
+        let shouldCollapse = false;
+        if (gestureState.vy > 0.5) {
+          shouldCollapse = true;
+        } else if (gestureState.vy < -0.5) {
+          shouldCollapse = false;
+        } else {
+          shouldCollapse = currentY > COLLAPSED_Y / 2;
+        }
+
+        isCollapsed.current = shouldCollapse;
+
+        Animated.spring(panY, {
+          toValue: shouldCollapse ? COLLAPSED_Y : 0,
+          useNativeDriver: true,
+          friction: 8,
+          tension: 40,
+        }).start();
+      },
+    })
+  ).current;
 
   // 오디오 웨이브 바 생성 (약 50개)
   const barCount = 50;
 
   useEffect(() => {
-    // 초기 높이 설정 (최대 28px)
-    const initialHeights = Array.from({ length: barCount }, () => Math.random() * 26 + 2);
+    const initialHeights = Array.from(
+      { length: barCount },
+      () => Math.random() * 26 + 2
+    );
     setBarHeights(initialHeights);
 
     if (isPlaying) {
       const animateBars = () => {
-        setBarHeights(prev => prev.map(() => Math.random() * 26 + 2));
+        setBarHeights((prev) => prev.map(() => Math.random() * 26 + 2));
       };
-
-      // 주기적으로 애니메이션 반복 (100ms마다)
       animationInterval.current = setInterval(animateBars, 100);
     }
 
@@ -128,7 +220,7 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
         return;
       }
 
-      subscription = await Location.watchHeadingAsync(location => {
+      subscription = await Location.watchHeadingAsync((location) => {
         if (location.trueHeading >= 0) {
           setHeading(location.trueHeading);
         } else if (location.magHeading >= 0) {
@@ -146,65 +238,37 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
     };
   }, []);
 
-  const handleClose = () => {
-    Alert.alert(
-      "안내 종료",
-      "안내를 종료할까요?",
-      [
-        {
-          text: "취소",
-          style: "cancel",
-        },
-        {
-          text: "종료",
-          onPress: onClose,
-          style: "destructive",
-        },
-      ],
-      { cancelable: true }
-    );
-  };
-
-  // 화살표는 위쪽을 가리키므로, heading이 0일 때는 0도 회전
-  // heading이 북쪽(0도)을 기준으로 회전
   const arrowRotation = heading !== null ? heading : 0;
 
+  if (!isPlaying) {
+    return null;
+  }
+
   return (
-    <BottomSheetContainer>
+    <AnimatedBottomSheet
+      style={[
+        bottomSheetShadow || undefined,
+        enableDrag ? { transform: [{ translateY: panY }] } : undefined,
+      ]}
+      {...(enableDrag ? panResponder.panHandlers : {})}
+    >
+      <HandleBarWrapper>
+        <HandleBar />
+      </HandleBarWrapper>
+
       {isPlaying && barHeights.length > 0 && (
         <AudioWaveContainer>
           {barHeights.map((height, index) => (
-            <AudioBar
-              key={index}
-              height={height}
-            />
+            <AudioBar key={index} height={height} />
           ))}
         </AudioWaveContainer>
       )}
-      <CloseButton onPress={handleClose}>
-        <Svg
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <Path
-            d="M12 13.3998L7.1 18.2998C6.91667 18.4831 6.68334 18.5748 6.4 18.5748C6.11667 18.5748 5.88334 18.4831 5.7 18.2998C5.51667 18.1165 5.425 17.8831 5.425 17.5998C5.425 17.3165 5.51667 17.0831 5.7 16.8998L10.6 11.9998L5.7 7.0998C5.51667 6.91647 5.425 6.68314 5.425 6.3998C5.425 6.11647 5.51667 5.88314 5.7 5.6998C5.88334 5.51647 6.11667 5.4248 6.4 5.4248C6.68334 5.4248 6.91667 5.51647 7.1 5.6998L12 10.5998L16.9 5.6998C17.0833 5.51647 17.3167 5.4248 17.6 5.4248C17.8833 5.4248 18.1167 5.51647 18.3 5.6998C18.4833 5.88314 18.575 6.11647 18.575 6.3998C18.575 6.68314 18.4833 6.91647 18.3 7.0998L13.4 11.9998L18.3 16.8998C18.4833 17.0831 18.575 17.3165 18.575 17.5998C18.575 17.8831 18.4833 18.1165 18.3 18.2998C18.1167 18.4831 17.8833 18.5748 17.6 18.5748C17.3167 18.5748 17.0833 18.4831 16.9 18.2998L12 13.3998Z"
-            fill="#4A4A4A"
-          />
-        </Svg>
-      </CloseButton>
 
       <DirectionContainer>
-        <Svg
-          width="150"
-          height="150"
-          viewBox="0 0 150 150"
-          fill="none"
-        >
+        <Svg width="150" height="150" viewBox="0 0 150 150" fill="none">
           <Defs>
             <LinearGradient
-              id="paint0_linear_334_368"
+              id="paint0_linear_334_367"
               x1="75"
               y1="0"
               x2="75"
@@ -212,17 +276,14 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
               gradientUnits="userSpaceOnUse"
             >
               <Stop stopColor="#68D0C6" />
-              <Stop
-                offset="1"
-                stopColor="#0076EF"
-              />
+              <Stop offset="1" stopColor="#0076EF" />
             </LinearGradient>
           </Defs>
           <Circle
             cx="75"
             cy="75"
             r="72.5"
-            stroke="url(#paint0_linear_334_368)"
+            stroke="url(#paint0_linear_334_367)"
             strokeWidth="5"
           />
         </Svg>
@@ -231,12 +292,7 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
             transform: [{ rotate: `${arrowRotation ?? 0}deg` }],
           }}
         >
-          <Svg
-            width="69"
-            height="82"
-            viewBox="0 0 69 82"
-            fill="none"
-          >
+          <Svg width="69" height="82" viewBox="0 0 69 82" fill="none">
             <Defs>
               <LinearGradient
                 id="paint0_linear_334_356"
@@ -247,10 +303,7 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
                 gradientUnits="userSpaceOnUse"
               >
                 <Stop stopColor="#68D0C6" />
-                <Stop
-                  offset="1"
-                  stopColor="#0076EF"
-                />
+                <Stop offset="1" stopColor="#0076EF" />
               </LinearGradient>
             </Defs>
             <Path
@@ -265,6 +318,6 @@ export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
 
       <DestinationText>{destination}</DestinationText>
       <InstructionText>{instruction}</InstructionText>
-    </BottomSheetContainer>
+    </AnimatedBottomSheet>
   );
 };
