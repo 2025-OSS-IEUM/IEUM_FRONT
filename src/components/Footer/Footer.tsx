@@ -3,7 +3,7 @@ import styled from "styled-components/native";
 import { Platform } from "react-native";
 import { MapIcon, HomeIcon, ProfileIcon } from "./FooterIcons";
 
-type TabType = "map" | "home" | "profile";
+type TabType = "map" | "home" | "profile" | "report";
 
 interface FooterProps {
   initialTab?: TabType;
