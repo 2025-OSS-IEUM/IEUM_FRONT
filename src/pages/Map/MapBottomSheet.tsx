@@ -85,12 +85,12 @@ const InstructionText = styled.Text`
   font-size: 24px;
 `;
 
-export const MapBottomSheet: React.FC<MapBottomSheetProps> = ({
+export const MapBottomSheet = ({
   destination = "국립한밭대학교 정문",
   instruction = "50걸음 직진 후 좌회전입니다",
   onClose,
   isPlaying = true,
-}) => {
+}: MapBottomSheetProps) => {
   const [heading, setHeading] = useState<number | null>(null);
   const [barHeights, setBarHeights] = useState<number[]>([]);
   const animationInterval = useRef<NodeJS.Timeout | null>(null);
