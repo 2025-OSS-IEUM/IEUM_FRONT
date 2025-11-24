@@ -1,4 +1,5 @@
 import React from "react";
+import { StyleProp, TextStyle } from "react-native";
 import styled from "styled-components/native";
 
 interface CustomTextProps {
@@ -7,6 +8,7 @@ interface CustomTextProps {
   color?: string;
   weight?: "normal" | "semibold" | "bold" | "300" | "600" | "700";
   align?: "left" | "center" | "right";
+  style?: StyleProp<TextStyle>;
 }
 
 const StyledText = styled.Text<{
@@ -42,9 +44,16 @@ export const CustomText = ({
   color,
   weight,
   align,
+  style,
 }: CustomTextProps) => {
   return (
-    <StyledText size={size} color={color} weight={weight} align={align}>
+    <StyledText
+      size={size}
+      color={color}
+      weight={weight}
+      align={align}
+      style={style}
+    >
       {children}
     </StyledText>
   );
