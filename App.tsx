@@ -9,7 +9,7 @@ import { View, Text } from "react-native";
 import { Footer } from "./src/components";
 import { Home, Map, Profile, Report, ReportDetails, ReportDone } from "./src/pages";
 
-type TabType = 'map' | 'home' | 'profile' | 'report';
+type TabType = "map" | "home" | "profile" | "report";
 
 interface ReportData {
   location: {
@@ -49,9 +49,12 @@ export default function App() {
     "Pretendard-Bold": require("./assets/fonts/Pretendard-Bold.ttf"),
     "Pretendard-ExtraBold": require("./assets/fonts/Pretendard-ExtraBold.otf"),
     "Pretendard-Black": require("./assets/fonts/Pretendard-Black.otf"),
+    "Pinkfong-Baby-Shark-Regular": require("./assets/fonts/Pinkfong Baby Shark Font_ Regular.ttf"),
+    "Pinkfong-Baby-Shark-Light": require("./assets/fonts/Pinkfong Baby Shark Font_ Light.ttf"),
+    "Pinkfong-Baby-Shark-Bold": require("./assets/fonts/Pinkfong Baby Shark Font_ Bold.ttf"),
   });
 
-  const [activeTab, setActiveTab] = useState<TabType>('home');
+  const [activeTab, setActiveTab] = useState<TabType>("home");
   const [showReportDetails, setShowReportDetails] = useState(false);
   const [showReportDone, setShowReportDone] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -69,7 +72,7 @@ export default function App() {
           onNavigateToHome={() => {
             setShowReportDone(false);
             setReportData(null);
-            setActiveTab('home');
+            setActiveTab("home");
           }}
           onNavigateBack={() => {
             setShowReportDone(false);
@@ -80,33 +83,41 @@ export default function App() {
     }
 
     if (showReportDetails) {
-      return <ReportDetails reports={reports} onNavigateBack={() => setShowReportDetails(false)} />;
+      return (
+        <ReportDetails
+          reports={reports}
+          onNavigateBack={() => setShowReportDetails(false)}
+        />
+      );
     }
 
     switch (activeTab) {
-      case 'map':
+      case "map":
         return <Map />;
-      case 'home':
+      case "home":
         return (
           <Home
             onNavigateToReportDetails={() => setShowReportDetails(true)}
-            onNavigateToReport={() => setActiveTab('report')}
+            onNavigateToReport={() => setActiveTab("report")}
           />
         );
-      case 'profile':
+      case "profile":
         return <Profile />;
-      case 'report':
+      case "report":
         return (
           <Report
-            onNavigateToHome={() => setActiveTab('home')}
-            onReportSubmit={(data) => {
+            onNavigateToHome={() => setActiveTab("home")}
+            onReportSubmit={data => {
               setReportData(data);
               setShowReportDone(true);
-              
+
               // 제보 내역에 추가
               const now = new Date();
-              const dateStr = `${String(now.getFullYear()).slice(-2)}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-              
+              const dateStr = `${String(now.getFullYear()).slice(-2)}-${String(now.getMonth() + 1).padStart(
+                2,
+                "0"
+              )}-${String(now.getDate()).padStart(2, "0")}`;
+
               const newReport: ReportItemData = {
                 id: Date.now().toString(),
                 thumbnail: data.images[0] || require("./assets/dummy/dummy1.png"),
@@ -115,7 +126,7 @@ export default function App() {
                 date: dateStr,
                 status: "pending",
               };
-              
+
               setReports(prev => [newReport, ...prev]);
             }}
           />
@@ -124,7 +135,7 @@ export default function App() {
         return (
           <Home
             onNavigateToReportDetails={() => setShowReportDetails(true)}
-            onNavigateToReport={() => setActiveTab('report')}
+            onNavigateToReport={() => setActiveTab("report")}
           />
         );
     }
@@ -143,7 +154,10 @@ export default function App() {
       <ThemeProvider theme={theme}>
         <MainContainer>
           {renderPage()}
-          <Footer initialTab={activeTab} onTabChange={handleTabChange} />
+          <Footer
+            initialTab={activeTab}
+            onTabChange={handleTabChange}
+          />
         </MainContainer>
         <StatusBar style="auto" />
       </ThemeProvider>
