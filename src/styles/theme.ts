@@ -18,6 +18,11 @@ export const theme = {
       secondary: "#666666",
       white: "#FFFFFF",
     },
+    border: "#E0E0E0",
+    error: "#FF4444",
+    placeholder: "#999999",
+    lightGray: "#F5F5F5",
+    white: "#FFFFFF",
   },
   spacing: {
     xs: 4,
@@ -37,6 +42,14 @@ export const theme = {
     md: 16,
     lg: 18,
     xl: 20,
+    xxl: 24,
+  },
+  sizes: {
+    imageThumbnail: 100,
+    removeButton: 24,
+    mapHeight: 300,
+    inputHeight: 44,
+    textAreaMinHeight: 100,
   },
   fontWeight: {
     normal: "400" as const,
