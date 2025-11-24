@@ -255,9 +255,10 @@ interface ReportItemData {
 
 interface ReportDetailsProps {
   onNavigateBack?: () => void;
+  reports?: ReportItemData[];
 }
 
-export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
+export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDetailsProps) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>("report");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -327,7 +328,10 @@ export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
     }
   };
 
-  const filteredReports = mockReports.filter(report => {
+  // propReports가 있으면 사용하고, 없으면 mockReports 사용
+  const allReports = propReports && propReports.length > 0 ? propReports : mockReports;
+
+  const filteredReports = allReports.filter(report => {
     if (activeFilter === "all") return true;
     return report.status === activeFilter;
   });

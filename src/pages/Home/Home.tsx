@@ -1,7 +1,6 @@
 import React from "react";
 import styled from "styled-components/native";
 import { Container, CustomText } from "../../components";
-import { DefaultButton } from "../../components/Button";
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -16,21 +15,12 @@ const Title = styled(CustomText)`
   margin-bottom: 16px;
 `;
 
-const Subtitle = styled(CustomText)`
-  font-size: 16px;
-  margin-bottom: 8px;
-`;
-
-const ButtonContainer = styled.View`
-  margin-top: 24px;
-  width: 200px;
-`;
-
 interface HomeProps {
   onNavigateToReportDetails?: () => void;
+  onNavigateToReport?: () => void;
 }
 
-export const Home = ({ onNavigateToReportDetails }: HomeProps) => {
+export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProps) => {
   return (
     <Container>
       <HomeContainer>
@@ -43,11 +33,6 @@ export const Home = ({ onNavigateToReportDetails }: HomeProps) => {
         <CustomText size={16}>
           홈 화면이 여기에 표시됩니다.
         </CustomText>
-        <ButtonContainer>
-          <DefaultButton onPress={onNavigateToReportDetails}>
-            제보 내역 테스트
-          </DefaultButton>
-        </ButtonContainer>
       </HomeContainer>
     </Container>
   );
