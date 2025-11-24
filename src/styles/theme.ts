@@ -16,6 +16,7 @@ export const theme = {
     text: {
       primary: "#4A4A4A",
       secondary: "#666666",
+      white: "#FFFFFF",
     },
     border: "#E0E0E0",
     error: "#FF4444",
