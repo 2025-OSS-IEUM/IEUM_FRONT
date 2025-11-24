@@ -282,9 +282,15 @@ interface LocationData {
 
 interface ReportProps {
   onNavigateToHome?: () => void;
+  onReportSubmit?: (data: {
+    location: LocationData;
+    dangerType: string;
+    description: string;
+    images: string[];
+  }) => void;
 }
 
-export const Report = ({ onNavigateToHome }: ReportProps) => {
+export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
   const insets = useSafeAreaInsets();
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [dangerType, setDangerType] = useState("");
@@ -423,13 +429,9 @@ export const Report = ({ onNavigateToHome }: ReportProps) => {
     };
 
     console.log("제보 데이터:", reportData);
-    Alert.alert("성공", "제보가 완료되었습니다.");
     
-    // 폼 초기화
-    setSelectedLocation(null);
-    setDangerType("");
-    setDescription("");
-    setImages([]);
+    // 제보 완료 페이지로 이동
+    onReportSubmit?.(reportData);
   };
 
   return (

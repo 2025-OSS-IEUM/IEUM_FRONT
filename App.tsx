@@ -7,9 +7,31 @@ import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile, Report, ReportDetails } from "./src/pages";
+import { Home, Map, Profile, Report, ReportDetails, ReportDone } from "./src/pages";
 
 type TabType = 'map' | 'home' | 'profile' | 'report';
+
+interface ReportData {
+  location: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
+  dangerType: string;
+  description: string;
+  images: string[];
+}
+
+type ReportStatus = "approved" | "pending" | "rejected";
+
+interface ReportItemData {
+  id: string;
+  thumbnail: string | number;
+  title: string;
+  description: string;
+  date: string;
+  status: ReportStatus;
+}
 
 const MainContainer = styled.View`
   flex: 1;
@@ -31,27 +53,80 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<TabType>('home');
   const [showReportDetails, setShowReportDetails] = useState(false);
+  const [showReportDone, setShowReportDone] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [reports, setReports] = useState<ReportItemData[]>([]);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
   };
 
   const renderPage = () => {
+    if (showReportDone && reportData) {
+      return (
+        <ReportDone
+          reportData={reportData}
+          onNavigateToHome={() => {
+            setShowReportDone(false);
+            setReportData(null);
+            setActiveTab('home');
+          }}
+          onNavigateBack={() => {
+            setShowReportDone(false);
+            setReportData(null);
+          }}
+        />
+      );
+    }
+
     if (showReportDetails) {
-      return <ReportDetails onNavigateBack={() => setShowReportDetails(false)} />;
+      return <ReportDetails reports={reports} onNavigateBack={() => setShowReportDetails(false)} />;
     }
 
     switch (activeTab) {
       case 'map':
         return <Map />;
       case 'home':
-        return <Home onNavigateToReportDetails={() => setShowReportDetails(true)} />;
+        return (
+          <Home
+            onNavigateToReportDetails={() => setShowReportDetails(true)}
+            onNavigateToReport={() => setActiveTab('report')}
+          />
+        );
       case 'profile':
         return <Profile />;
       case 'report':
-        return <Report onNavigateToHome={() => setActiveTab('home')} />;
+        return (
+          <Report
+            onNavigateToHome={() => setActiveTab('home')}
+            onReportSubmit={(data) => {
+              setReportData(data);
+              setShowReportDone(true);
+              
+              // 제보 내역에 추가
+              const now = new Date();
+              const dateStr = `${String(now.getFullYear()).slice(-2)}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+              
+              const newReport: ReportItemData = {
+                id: Date.now().toString(),
+                thumbnail: data.images[0] || require("./assets/dummy/dummy1.png"),
+                title: data.dangerType,
+                description: data.description,
+                date: dateStr,
+                status: "pending",
+              };
+              
+              setReports(prev => [newReport, ...prev]);
+            }}
+          />
+        );
       default:
-        return <Home onNavigateToReportDetails={() => setShowReportDetails(true)} />;
+        return (
+          <Home
+            onNavigateToReportDetails={() => setShowReportDetails(true)}
+            onNavigateToReport={() => setActiveTab('report')}
+          />
+        );
     }
   };
 
