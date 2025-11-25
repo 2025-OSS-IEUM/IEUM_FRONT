@@ -10,20 +10,26 @@ interface DefaultButtonProps extends TouchableOpacityProps {
 }
 
 const StyledButton = styled.TouchableOpacity<{ fullWidth?: boolean }>`
-  ${props => (props.fullWidth ? "flex: 1;" : "")}
-  padding: ${props => props.theme.spacing.md + 4}px ${props => props.theme.spacing.lg}px;
-  background-color: ${props => props.theme.colors.primary};
-  border-radius: ${props => props.theme.borderRadius.lg}px;
+  ${(props) => (props.fullWidth ? "flex: 1;" : "")}
+  padding: ${(props) => props.theme.spacing.md + 4}px ${(props) =>
+    props.theme.spacing.lg}px;
+  background-color: ${(props) => props.theme.colors.primary};
+  border-radius: ${(props) => props.theme.borderRadius.lg}px;
   align-items: center;
   justify-content: center;
-  shadow-color: ${props => props.theme.colors.primary};
+  shadow-color: ${(props) => props.theme.colors.primary};
   shadow-offset: 0px 4px;
-  shadow-opacity: 0.3;
+  shadow-opacity: 0.1;
   shadow-radius: 8px;
   elevation: 4;
 `;
 
-export const DefaultButton = ({ children, fullWidth = false, activeOpacity = 0.8, ...props }: DefaultButtonProps) => {
+export const DefaultButton = ({
+  children,
+  fullWidth = false,
+  activeOpacity = 0.8,
+  ...props
+}: DefaultButtonProps) => {
   return (
     <StyledButton
       fullWidth={fullWidth}
