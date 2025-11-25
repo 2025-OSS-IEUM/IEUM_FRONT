@@ -1,10 +1,21 @@
-import React from "react";
-import { Platform, TouchableOpacity } from "react-native";
+import React, { useState, useRef, useEffect } from "react";
+import {
+  Platform,
+  TouchableOpacity,
+  Animated,
+  Modal,
+  KeyboardAvoidingView,
+} from "react-native";
 import styled from "styled-components/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, SvgUri } from "react-native-svg";
 import { useAssets } from "expo-asset";
-import { Container, CustomText } from "../../components";
+import {
+  Container,
+  CustomText,
+  DefaultButton,
+  InputField,
+} from "../../components";
 
 const ProfileScroll = styled.ScrollView`
   flex: 1;
@@ -27,11 +38,26 @@ const Header = styled.View`
   left: 0;
   right: 0;
   height: ${HEADER_TOTAL_HEIGHT}px;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
   padding-top: ${HEADER_TOP_OFFSET}px;
+  padding-left: 20px;
+  padding-right: 20px;
   background-color: #f8f9fb;
   z-index: 10;
+`;
+
+const HeaderLeft = styled.View`
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  align-items: center;
+`;
+
+const HeaderCenter = styled.View`
+  flex: 1;
+  align-items: center;
+  justify-content: center;
 `;
 
 const HeaderTitle = styled(CustomText)`
@@ -39,6 +65,11 @@ const HeaderTitle = styled(CustomText)`
   font-weight: 700;
   color: #4b4b4b;
   text-align: center;
+`;
+
+const HeaderRight = styled.View`
+  width: 40px;
+  height: 40px;
 `;
 
 const GreetingCard = styled.View`
@@ -198,6 +229,229 @@ const ArrowIcon = () => (
   </Svg>
 );
 
+const BackIcon = () => (
+  <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M15 18L9 12L15 6"
+      stroke="#4b4b4b"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const EditIcon = () => (
+  <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <Path
+      d="M11.3333 2.00004C11.5084 1.82493 11.7163 1.68605 11.9447 1.59129C12.1731 1.49654 12.4173 1.44775 12.6639 1.44775C12.9105 1.44775 13.1547 1.49654 13.3831 1.59129C13.6115 1.68605 13.8194 1.82493 13.9945 2.00004C14.1696 2.17515 14.3085 2.38305 14.4032 2.61146C14.498 2.83987 14.5468 3.08405 14.5468 3.33071C14.5468 3.57737 14.498 3.82155 14.4032 4.04996C14.3085 4.27837 14.1696 4.48627 13.9945 4.66138L5.17667 13.4792L1.33334 14.6667L2.52084 10.8234L11.3333 2.00004Z"
+      stroke="#4b4b4b"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const HeaderBackButton = styled(TouchableOpacity)`
+  width: 40px;
+  height: 40px;
+  justify-content: center;
+  align-items: center;
+`;
+
+const MyInfoScroll = styled.ScrollView`
+  flex: 1;
+`;
+
+const MyInfoContent = styled.View`
+  padding-top: ${HEADER_TOTAL_HEIGHT + 40}px;
+  padding-bottom: 32px;
+  padding-left: 24px;
+  padding-right: 24px;
+  align-items: center;
+`;
+
+const ProfileImageWrapper = styled(Animated.View)`
+  margin-bottom: 20px;
+`;
+
+const ProfileImageContainer = styled(Animated.View)`
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+`;
+
+const ProfileGradient = styled(LinearGradient)`
+  width: 120px;
+  height: 120px;
+  border-radius: 60px;
+  justify-content: center;
+  align-items: center;
+`;
+
+const DefaultProfileIcon = () => (
+  <Svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+    <Path
+      d="M40 40C47.4558 40 53.5 33.9558 53.5 26.5C53.5 19.0442 47.4558 13 40 13C32.5442 13 26.5 19.0442 26.5 26.5C26.5 33.9558 32.5442 40 40 40Z"
+      fill="#ffffff"
+    />
+    <Path
+      d="M40 45C28.9543 45 20 53.9543 20 65V67H60V65C60 53.9543 51.0457 45 40 45Z"
+      fill="#ffffff"
+    />
+  </Svg>
+);
+
+const NameContainer = styled(Animated.View)`
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 40px;
+`;
+
+const NameText = styled(CustomText)`
+  font-size: 22px;
+  font-weight: 700;
+  color: #4b4b4b;
+  margin-right: 8px;
+`;
+
+const EditButton = styled(TouchableOpacity)`
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  background-color: #f0f0f0;
+`;
+
+const EditButtonAnimated = styled(Animated.View)`
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+  align-items: center;
+  border-radius: 16px;
+  background-color: #f0f0f0;
+`;
+
+const InfoCard = styled(Animated.View)`
+  width: 100%;
+  background-color: #ffffff;
+  border-radius: 20px;
+  margin-bottom: 24px;
+  overflow: hidden;
+`;
+
+const InfoCardGradient = styled(LinearGradient)`
+  width: 100%;
+  border-radius: 20px;
+`;
+
+const InfoRow = styled.View`
+  padding-top: 18px;
+  padding-bottom: 18px;
+  padding-left: 20px;
+  padding-right: 20px;
+`;
+
+const InfoLabel = styled(CustomText)`
+  font-size: 14px;
+  color: #4b4b4b;
+  margin-bottom: 8px;
+`;
+
+const InfoValue = styled(CustomText)`
+  font-size: 16px;
+  color: #797979;
+`;
+
+const InfoDivider = styled.View`
+  height: 1px;
+  background-color: #f2f2f2;
+  margin-left: 20px;
+  margin-right: 20px;
+`;
+
+const EditButtonContainer = styled(Animated.View)`
+  width: 100%;
+  padding-top: 20px;
+`;
+
+const BounceButton = styled(Animated.View)`
+  width: 100%;
+`;
+
+const ModalButtonContainer = styled.View`
+  flex-direction: row;
+  gap: 12px;
+  width: 100%;
+`;
+
+const CancelButton = styled(TouchableOpacity)`
+  flex: 1;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-radius: 12px;
+  background-color: #f0f0f0;
+  align-items: center;
+  justify-content: center;
+`;
+
+const CancelButtonText = styled(CustomText)`
+  font-size: 16px;
+  font-weight: 600;
+  color: #797979;
+`;
+
+const SaveButton = styled(TouchableOpacity)`
+  flex: 1;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-radius: 12px;
+  background-color: #68d0c6;
+  align-items: center;
+  justify-content: center;
+`;
+
+const SaveButtonText = styled(CustomText)`
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+`;
+
+const ModalOverlay = styled.View`
+  flex: 1;
+  background-color: rgba(0, 0, 0, 0.5);
+  justify-content: center;
+  align-items: center;
+`;
+
+const ModalContent = styled.View`
+  width: 85%;
+  max-width: 350px;
+  background-color: #ffffff;
+  border-radius: 20px;
+  padding-top: 32px;
+  padding-bottom: 32px;
+  padding-left: 24px;
+  padding-right: 24px;
+`;
+
+const ModalTitle = styled(CustomText)`
+  font-size: 20px;
+  font-weight: 700;
+  color: #4b4b4b;
+  margin-bottom: 24px;
+  text-align: center;
+`;
+
+const ModalInputContainer = styled.View`
+  margin-bottom: 20px;
+`;
+
 const statsData = [
   { value: "4", label: "즐겨찾기" },
   { value: "15", label: "제보 내역" },
@@ -208,6 +462,13 @@ const reportLinks = ["제보하기", "제보 내역", "신고하기"];
 const settingLinks = ["즐겨찾기", "공지사항", "계정", "로그아웃"];
 
 export const Profile = () => {
+  const [showMyInfo, setShowMyInfo] = useState(false);
+  const [isEditingEmail, setIsEditingEmail] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [userName, setUserName] = useState("홍길동");
+  const [userEmail, setUserEmail] = useState("hong12@naver.com");
+  const [editName, setEditName] = useState("홍길동");
+  const [editEmail, setEditEmail] = useState("hong12@naver.com");
   const [assets] = useAssets([require("../../../assets/mypage/ieum.svg")]);
   const dogUri = assets?.[0]?.localUri ?? assets?.[0]?.uri;
 
@@ -223,6 +484,354 @@ export const Profile = () => {
     },
   });
 
+  const infoCardShadow = Platform.select({
+    ios: {
+      shadowColor: "rgba(0, 0, 0, 0.05)",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 1,
+      shadowRadius: 4,
+    },
+    android: {
+      elevation: 2,
+    },
+  });
+
+  // 애니메이션 값들
+  const profileScale = useRef(new Animated.Value(1)).current;
+  const profileRotation = useRef(new Animated.Value(0)).current;
+  const nameScale = useRef(new Animated.Value(1)).current;
+  const editButtonScale = useRef(new Animated.Value(1)).current;
+  const cardOpacity = useRef(new Animated.Value(0)).current;
+  const cardTranslateY = useRef(new Animated.Value(20)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
+
+  // 컴포넌트 마운트 시 애니메이션
+  useEffect(() => {
+    if (showMyInfo) {
+      // 카드 페이드인 애니메이션
+      Animated.parallel([
+        Animated.timing(cardOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.spring(cardTranslateY, {
+          toValue: 0,
+          tension: 50,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // 리셋
+      cardOpacity.setValue(0);
+      cardTranslateY.setValue(20);
+    }
+  }, [showMyInfo]);
+
+  const handleProfilePress = () => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.spring(profileScale, {
+          toValue: 0.95,
+          tension: 300,
+          friction: 3,
+          useNativeDriver: true,
+        }),
+        Animated.timing(profileRotation, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.parallel([
+        Animated.spring(profileScale, {
+          toValue: 1,
+          tension: 300,
+          friction: 3,
+          useNativeDriver: true,
+        }),
+        Animated.timing(profileRotation, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start();
+  };
+
+  const handleNamePress = () => {
+    Animated.sequence([
+      Animated.spring(nameScale, {
+        toValue: 1.1,
+        tension: 200,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+      Animated.spring(nameScale, {
+        toValue: 1,
+        tension: 200,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const handleButtonPress = () => {
+    if (isEditingEmail) {
+      // 저장
+      setUserEmail(editEmail);
+      setIsEditingEmail(false);
+    } else {
+      // 수정 모드로 전환
+      setEditEmail(userEmail);
+      setIsEditingEmail(true);
+    }
+
+    Animated.sequence([
+      Animated.spring(buttonScale, {
+        toValue: 0.95,
+        tension: 300,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+      Animated.spring(buttonScale, {
+        toValue: 1,
+        tension: 300,
+        friction: 3,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const handleCancelEmail = () => {
+    setEditEmail(userEmail);
+    setIsEditingEmail(false);
+  };
+
+  const handleEditNamePress = () => {
+    setEditName(userName);
+    setShowNameModal(true);
+  };
+
+  const handleSaveName = () => {
+    setUserName(editName);
+    setShowNameModal(false);
+  };
+
+  const handleCancelName = () => {
+    setEditName(userName);
+    setShowNameModal(false);
+  };
+
+  const profileRotate = profileRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "10deg"],
+  });
+
+  if (showMyInfo) {
+    return (
+      <Container backgroundColor="#f8f9fb">
+        <Header>
+          <HeaderLeft>
+            <HeaderBackButton
+              onPress={() => setShowMyInfo(false)}
+              activeOpacity={0.7}
+            >
+              <BackIcon />
+            </HeaderBackButton>
+          </HeaderLeft>
+          <HeaderCenter>
+            <HeaderTitle size={20} weight="700">
+              내 정보
+            </HeaderTitle>
+          </HeaderCenter>
+          <HeaderRight />
+        </Header>
+        <MyInfoScroll
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1 }}
+        >
+          <MyInfoContent>
+            <ProfileImageWrapper>
+              <TouchableOpacity onPress={handleProfilePress} activeOpacity={1}>
+                <ProfileImageContainer
+                  style={{
+                    transform: [
+                      { scale: profileScale },
+                      { rotate: profileRotate },
+                    ],
+                  }}
+                >
+                  <ProfileGradient
+                    colors={["#b3e5fc", "#81d4fa", "#4fc3f7"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <DefaultProfileIcon />
+                  </ProfileGradient>
+                </ProfileImageContainer>
+              </TouchableOpacity>
+            </ProfileImageWrapper>
+
+            <NameContainer style={{ transform: [{ scale: nameScale }] }}>
+              <TouchableOpacity onPress={handleNamePress} activeOpacity={1}>
+                <NameText>{userName}</NameText>
+              </TouchableOpacity>
+              <EditButtonAnimated
+                style={{ transform: [{ scale: editButtonScale }] }}
+              >
+                <TouchableOpacity
+                  onPress={handleEditNamePress}
+                  activeOpacity={0.7}
+                >
+                  <EditIcon />
+                </TouchableOpacity>
+              </EditButtonAnimated>
+            </NameContainer>
+
+            <InfoCard
+              style={[
+                infoCardShadow,
+                {
+                  opacity: cardOpacity,
+                  transform: [{ translateY: cardTranslateY }],
+                },
+              ]}
+            >
+              <InfoRow>
+                <InfoLabel size={14} weight="600">
+                  아이디
+                </InfoLabel>
+                <InfoValue size={16} color="#797979">
+                  honghong12
+                </InfoValue>
+              </InfoRow>
+              <InfoDivider />
+              <InfoRow>
+                <InfoLabel size={14} weight="600">
+                  이메일
+                </InfoLabel>
+                {isEditingEmail ? (
+                  <InputField
+                    value={editEmail}
+                    onChangeText={setEditEmail}
+                    placeholder="이메일을 입력하세요"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    containerStyle={{ width: "100%", marginBottom: 0 }}
+                  />
+                ) : (
+                  <InfoValue size={16} color="#797979">
+                    {userEmail}
+                  </InfoValue>
+                )}
+              </InfoRow>
+              <InfoDivider />
+              <InfoRow>
+                <InfoLabel size={14} weight="600">
+                  전화번호
+                </InfoLabel>
+                <InfoValue size={16} color="#797979">
+                  010-1234-5678
+                </InfoValue>
+              </InfoRow>
+            </InfoCard>
+
+            <EditButtonContainer>
+              {isEditingEmail ? (
+                <ModalButtonContainer>
+                  <CancelButton onPress={handleCancelEmail} activeOpacity={0.7}>
+                    <CancelButtonText>취소</CancelButtonText>
+                  </CancelButton>
+                  <BounceButton
+                    style={{ flex: 1, transform: [{ scale: buttonScale }] }}
+                  >
+                    <SaveButton onPress={handleButtonPress} activeOpacity={0.8}>
+                      <SaveButtonText>저장</SaveButtonText>
+                    </SaveButton>
+                  </BounceButton>
+                </ModalButtonContainer>
+              ) : (
+                <BounceButton style={{ transform: [{ scale: buttonScale }] }}>
+                  <DefaultButton fullWidth onPress={handleButtonPress}>
+                    수정하기
+                  </DefaultButton>
+                </BounceButton>
+              )}
+            </EditButtonContainer>
+          </MyInfoContent>
+        </MyInfoScroll>
+
+        <Modal
+          visible={showNameModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={handleCancelName}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+          >
+            <ModalOverlay>
+              <TouchableOpacity
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                }}
+                activeOpacity={1}
+                onPress={handleCancelName}
+              />
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <ModalContent
+                  style={
+                    Platform.OS === "ios"
+                      ? {
+                          shadowColor: "rgba(0, 0, 0, 0.2)",
+                          shadowOffset: { width: 0, height: 4 },
+                          shadowOpacity: 1,
+                          shadowRadius: 12,
+                        }
+                      : { elevation: 8 }
+                  }
+                >
+                  <ModalTitle>이름 수정</ModalTitle>
+
+                  <ModalInputContainer>
+                    <InputField
+                      label="이름"
+                      value={editName}
+                      onChangeText={setEditName}
+                      placeholder="이름을 입력하세요"
+                    />
+                  </ModalInputContainer>
+
+                  <ModalButtonContainer>
+                    <CancelButton
+                      onPress={handleCancelName}
+                      activeOpacity={0.7}
+                    >
+                      <CancelButtonText>취소</CancelButtonText>
+                    </CancelButton>
+                    <SaveButton onPress={handleSaveName} activeOpacity={0.8}>
+                      <SaveButtonText>저장</SaveButtonText>
+                    </SaveButton>
+                  </ModalButtonContainer>
+                </ModalContent>
+              </TouchableOpacity>
+            </ModalOverlay>
+          </KeyboardAvoidingView>
+        </Modal>
+      </Container>
+    );
+  }
+
   return (
     <Container backgroundColor="#f8f9fb">
       <Header>
@@ -237,9 +846,9 @@ export const Profile = () => {
         <ContentWrapper>
           <GreetingCard>
             <GreetingText size={21} weight="700">
-              홍길동님, 반가워요!
+              {userName}님, 반가워요!
             </GreetingText>
-            <SubLink>
+            <SubLink onPress={() => setShowMyInfo(true)} activeOpacity={0.7}>
               <SubLinkText>내 정보</SubLinkText>
               <SubLinkArrow>
                 <ArrowIcon />
