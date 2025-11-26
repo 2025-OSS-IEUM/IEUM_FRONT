@@ -93,7 +93,7 @@ export default function App() {
 
     switch (activeTab) {
       case "map":
-        return <Map />;
+        return <Map onNavigateToReport={() => setActiveTab("report")} />;
       case "home":
         return (
           <Home

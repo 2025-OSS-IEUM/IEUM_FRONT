@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import {
   Platform,
   Animated,
@@ -13,7 +13,6 @@ import Svg, {
   Stop,
   Circle,
 } from "react-native-svg";
-import * as Location from "expo-location";
 import { theme } from "../../styles/theme";
 
 interface MapBottomSheetProps {
@@ -23,6 +22,15 @@ interface MapBottomSheetProps {
   isPlaying?: boolean;
   panY?: Animated.Value; // Map.tsx에서 공유받는 애니메이션 값
   enableDrag?: boolean;
+  distance?: number;
+  isRecalculating?: boolean;
+  hasDeviation?: boolean;
+  currentCoordinate?: { latitude: number; longitude: number };
+  destinationCoordinate?: { latitude: number; longitude: number };
+  heading?: number | null;
+  onReportDanger?: () => void;
+  routePath?: { latitude: number; longitude: number }[];
+  onBlurMap?: (shouldBlur: boolean) => void;
 }
 
 const bottomSheetShadow = Platform.select({
@@ -40,7 +48,7 @@ const bottomSheetShadow = Platform.select({
 
 const BottomSheetContainer = styled.View`
   width: 100%;
-  height: 419px;
+  height: 320px;
   flex-shrink: 0;
   background-color: #ffffff;
   border-radius: 20px 20px 0 0;
@@ -88,37 +96,118 @@ const AudioBar = styled.View<{ height: number }>`
 `;
 
 const DirectionContainer = styled.View`
-  width: 150px;
-  height: 150px;
+  width: 105px;
+  height: 105px;
   justify-content: center;
   align-items: center;
-  margin-top: 70px;
-  margin-bottom: 30px;
+  margin-top: 20px;
+  margin-bottom: 14px;
   position: relative;
 `;
 
 const ArrowWrapper = styled.View`
   position: absolute;
-  width: 69px;
-  height: 82px;
+  width: 48px;
+  height: 57px;
   justify-content: center;
   align-items: center;
 `;
 
 const DestinationText = styled.Text`
-  color: #a2a2a2;
+  color: ${(props) => props.theme.colors.placeholder};
   text-align: center;
   font-family: ${(props) => props.theme.fonts.semiBold};
-  font-size: 20px;
-  margin-bottom: 20px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  letter-spacing: -0.3px;
 `;
 
 const InstructionText = styled.Text`
-  color: #4a4a4a;
+  color: ${(props) => props.theme.colors.text.primary};
+  text-align: center;
+  font-family: ${(props) => props.theme.fonts.extraBold};
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: -0.5px;
+`;
+
+const StatusPill = styled.View`
+  padding-top: 6px;
+  padding-bottom: 6px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 14px;
+  background-color: rgba(255, 68, 68, 0.1);
+  margin-top: 12px;
+  border: 1px solid rgba(255, 68, 68, 0.2);
+`;
+
+const StatusPillText = styled.Text`
+  color: ${(props) => props.theme.colors.error};
   text-align: center;
   font-family: ${(props) => props.theme.fonts.bold};
-  font-size: 24px;
+  font-size: 13px;
 `;
+
+const DistanceText = styled.Text`
+  margin-top: 8px;
+  color: #0076ef;
+  text-align: center;
+  font-family: ${(props) => props.theme.fonts.extraBold};
+  font-size: 16px;
+`;
+
+const ButtonRow = styled.View`
+  flex-direction: row;
+  width: 100%;
+  margin-top: 16px;
+  gap: 8px;
+`;
+
+const ActionButton = styled.TouchableOpacity<{
+  variant?: "danger" | "secondary";
+}>`
+  flex: 1;
+  height: 46px;
+  border-radius: 14px;
+  background-color: ${(props) =>
+    props.variant === "danger" ? "#FFF5F5" : "#F8FAFC"};
+  align-items: center;
+  justify-content: center;
+  border: 1px solid
+    ${(props) =>
+      props.variant === "danger"
+        ? props.theme.colors.error
+        : props.theme.colors.border};
+`;
+
+const ActionButtonText = styled.Text<{ variant?: "danger" | "secondary" }>`
+  font-family: ${(props) => props.theme.fonts.bold};
+  font-size: 15px;
+  color: ${(props) =>
+    props.variant === "danger"
+      ? props.theme.colors.error
+      : props.theme.colors.text.secondary};
+`;
+
+const toRadians = (deg: number) => (deg * Math.PI) / 180;
+
+const calculateBearing = (
+  from?: { latitude: number; longitude: number },
+  to?: { latitude: number; longitude: number }
+) => {
+  if (!from || !to) return null;
+  const lat1 = toRadians(from.latitude);
+  const lat2 = toRadians(to.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const brng = (Math.atan2(y, x) * 180) / Math.PI;
+  return (brng + 360) % 360;
+};
 
 export const MapBottomSheet = ({
   destination = "국립한밭대학교 정문",
@@ -127,16 +216,31 @@ export const MapBottomSheet = ({
   isPlaying = true,
   panY: externalPanY,
   enableDrag = true,
+  distance,
+  isRecalculating = false,
+  hasDeviation = false,
+  currentCoordinate,
+  destinationCoordinate,
+  heading = null,
+  onReportDanger,
+  routePath, // Add routePath prop
+  onBlurMap,
 }: MapBottomSheetProps) => {
-  const [heading, setHeading] = useState<number | null>(null);
   const [barHeights, setBarHeights] = useState<number[]>([]);
   const animationInterval = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (onBlurMap) {
+      onBlurMap(!isCollapsed.current);
+    }
+  }, [onBlurMap]);
 
   // 외부에서 주입받은 panY가 없으면 내부에서 생성 (하위 호환성)
   const internalPanY = useRef(new Animated.Value(0)).current;
   const panY = externalPanY || internalPanY;
 
-  const COLLAPSED_Y = 360;
+  // 높이 320px - 상단 탭 높이 30px - 여유분 10px = 280px 만큼 내려감
+  const COLLAPSED_Y = 280;
   const isCollapsed = useRef(false);
 
   const panResponder = useRef(
@@ -177,6 +281,11 @@ export const MapBottomSheet = ({
 
         isCollapsed.current = shouldCollapse;
 
+        // Notify parent about collapse state change for blur effect
+        if (onBlurMap) {
+          onBlurMap(!shouldCollapse);
+        }
+
         Animated.spring(panY, {
           toValue: shouldCollapse ? COLLAPSED_Y : 0,
           useNativeDriver: true,
@@ -211,34 +320,40 @@ export const MapBottomSheet = ({
     };
   }, [isPlaying, barCount]);
 
-  useEffect(() => {
-    let subscription: Location.LocationSubscription | null = null;
+  const bearingToDestination = useMemo(() => {
+    if (!currentCoordinate || !routePath || routePath.length === 0) {
+      return calculateBearing(currentCoordinate, destinationCoordinate);
+    }
 
-    const startWatchingHeading = async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        return;
+    // Find the next point on the path that is at least 10 meters away
+    // to ensure the arrow points along the path, not just to the nearest point
+    let targetPoint = routePath[routePath.length - 1];
+    for (let i = 0; i < routePath.length; i++) {
+      const point = routePath[i];
+      const dist = Math.sqrt(
+        Math.pow(point.latitude - currentCoordinate.latitude, 2) +
+          Math.pow(point.longitude - currentCoordinate.longitude, 2)
+      );
+      // Approx conversion: 0.0001 degrees is roughly 11 meters
+      if (dist > 0.0001) {
+        targetPoint = point;
+        break;
       }
+    }
 
-      subscription = await Location.watchHeadingAsync((location) => {
-        if (location.trueHeading >= 0) {
-          setHeading(location.trueHeading);
-        } else if (location.magHeading >= 0) {
-          setHeading(location.magHeading);
-        }
-      });
-    };
+    return calculateBearing(currentCoordinate, targetPoint);
+  }, [currentCoordinate, destinationCoordinate, routePath]);
 
-    startWatchingHeading();
-
-    return () => {
-      if (subscription) {
-        subscription.remove();
-      }
-    };
-  }, []);
-
-  const arrowRotation = heading !== null ? heading : 0;
+  const arrowRotation = useMemo(() => {
+    if (bearingToDestination === null) {
+      return heading ?? 0;
+    }
+    if (heading === null) {
+      return bearingToDestination;
+    }
+    const diff = (bearingToDestination - heading + 360) % 360;
+    return diff;
+  }, [bearingToDestination, heading]);
 
   if (!isPlaying) {
     return null;
@@ -265,7 +380,7 @@ export const MapBottomSheet = ({
       )}
 
       <DirectionContainer>
-        <Svg width="150" height="150" viewBox="0 0 150 150" fill="none">
+        <Svg width="105" height="105" viewBox="0 0 150 150" fill="none">
           <Defs>
             <LinearGradient
               id="paint0_linear_334_367"
@@ -292,7 +407,7 @@ export const MapBottomSheet = ({
             transform: [{ rotate: `${arrowRotation ?? 0}deg` }],
           }}
         >
-          <Svg width="69" height="82" viewBox="0 0 69 82" fill="none">
+          <Svg width="48" height="57" viewBox="0 0 69 82" fill="none">
             <Defs>
               <LinearGradient
                 id="paint0_linear_334_356"
@@ -318,6 +433,28 @@ export const MapBottomSheet = ({
 
       <DestinationText>{destination}</DestinationText>
       <InstructionText>{instruction}</InstructionText>
+      {(hasDeviation || isRecalculating) && (
+        <StatusPill>
+          <StatusPillText>
+            {isRecalculating
+              ? "경로를 재탐색하고 있어요"
+              : "경로에서 벗어났어요"}
+          </StatusPillText>
+        </StatusPill>
+      )}
+
+      <ButtonRow>
+        <ActionButton
+          variant="secondary"
+          onPress={onReportDanger}
+          activeOpacity={0.8}
+        >
+          <ActionButtonText variant="secondary">위험 제보</ActionButtonText>
+        </ActionButton>
+        <ActionButton variant="danger" onPress={onClose} activeOpacity={0.8}>
+          <ActionButtonText variant="danger">안내 종료</ActionButtonText>
+        </ActionButton>
+      </ButtonRow>
     </AnimatedBottomSheet>
   );
 };
