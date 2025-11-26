@@ -1,8 +1,8 @@
 import React from "react";
-import { StyleProp, TextStyle } from "react-native";
+import { StyleProp, TextProps, TextStyle } from "react-native";
 import styled from "styled-components/native";
 
-interface CustomTextProps {
+interface CustomTextProps extends TextProps {
   children: React.ReactNode;
   size?: number;
   color?: string;
@@ -45,6 +45,7 @@ export const CustomText = ({
   weight,
   align,
   style,
+  ...rest
 }: CustomTextProps) => {
   return (
     <StyledText
@@ -53,6 +54,7 @@ export const CustomText = ({
       weight={weight}
       align={align}
       style={style}
+      {...rest}
     >
       {children}
     </StyledText>
