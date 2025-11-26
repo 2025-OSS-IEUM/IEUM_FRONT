@@ -55,6 +55,7 @@ export default function App() {
   });
 
   const [showSplash, setShowSplash] = useState(true);
+  const [showLoginSplash, setShowLoginSplash] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("home");
@@ -163,6 +164,22 @@ export default function App() {
     );
   }
 
+  if (showLoginSplash) {
+    return (
+      <SafeAreaProvider>
+        <ThemeProvider theme={theme}>
+          <Splash
+            onFinish={() => {
+              setShowLoginSplash(false);
+              setIsLoggedIn(true);
+            }}
+          />
+          <StatusBar style="light" />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    );
+  }
+
   if (!isLoggedIn) {
     if (showSignUp) {
       return (
@@ -185,7 +202,7 @@ export default function App() {
       <SafeAreaProvider>
         <ThemeProvider theme={theme}>
           <Login
-            onLoginSuccess={() => setIsLoggedIn(true)}
+            onLoginSuccess={() => setShowLoginSplash(true)}
             onNavigateToSignUp={() => setShowSignUp(true)}
             onNavigateToFindId={() => {
               // TODO: 아이디 찾기 페이지로 이동
