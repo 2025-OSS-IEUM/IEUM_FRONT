@@ -1,7 +1,14 @@
 import React, { useMemo, forwardRef } from "react";
 import styled from "styled-components/native";
-import { TextInput, TextInputProps } from "react-native";
+import { TextInput, TextInputProps, View } from "react-native";
 import { theme } from "../../styles/theme";
+import Svg, { Path } from "react-native-svg";
+
+interface PasswordValidation {
+  minLength: boolean;
+  hasNumber: boolean;
+  hasSpecialChar: boolean;
+}
 
 interface InputFieldProps extends Omit<TextInputProps, "style"> {
   label?: string;
@@ -9,6 +16,7 @@ interface InputFieldProps extends Omit<TextInputProps, "style"> {
   helperText?: string;
   errorText?: string;
   successText?: string;
+  passwordValidation?: PasswordValidation;
   left?: React.ReactNode;
   right?: React.ReactNode;
   containerStyle?: object;
@@ -70,19 +78,63 @@ const HelperText = styled.Text`
   font-size: ${(props) => props.theme.fontSize.sm}px;
 `;
 
-const ErrorText = styled.Text`
-  font-family: ${(props) => props.theme.fonts.primary};
+const MessageContainer = styled.View`
+  flex-direction: row;
+  align-items: center;
   margin-top: 6px;
-  color: ${(props) => props.theme.colors.error};
-  font-size: ${(props) => props.theme.fontSize.sm}px;
 `;
 
-const SuccessText = styled.Text`
+const MessageText = styled.Text<{ color: string }>`
   font-family: ${(props) => props.theme.fonts.primary};
-  margin-top: 6px;
-  color: #7ddb69;
+  color: ${(props) => props.color};
   font-size: ${(props) => props.theme.fontSize.sm}px;
+  margin-left: 4px;
 `;
+
+const PasswordValidationContainer = styled.View`
+  margin-top: 6px;
+`;
+
+const PasswordValidationItem = styled.View`
+  flex-direction: row;
+  align-items: center;
+  margin-top: 4px;
+`;
+
+const IconContainer = styled.View`
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+`;
+
+const CheckIcon = () => (
+  <IconContainer>
+    <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M13.3333 4L6 11.3333L2.66667 8"
+        stroke="#7DDB69"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  </IconContainer>
+);
+
+const ErrorIcon = () => (
+  <IconContainer>
+    <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <Path
+        d="M12 4L4 12M4 4L12 12"
+        stroke={theme.colors.error}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  </IconContainer>
+);
 
 export const InputField = forwardRef<TextInput, InputFieldProps>(
   (
@@ -92,6 +144,7 @@ export const InputField = forwardRef<TextInput, InputFieldProps>(
       helperText,
       errorText,
       successText,
+      passwordValidation,
       left,
       right,
       containerStyle,
@@ -123,10 +176,37 @@ export const InputField = forwardRef<TextInput, InputFieldProps>(
           {!!right && <Side>{right}</Side>}
         </InputWrap>
 
-        {!!errorText ? (
-          <ErrorText>{errorText}</ErrorText>
+        {!!passwordValidation ? (
+          <PasswordValidationContainer>
+            <PasswordValidationItem>
+              {passwordValidation.minLength ? <CheckIcon /> : <View style={{ width: 16, height: 16 }} />}
+              <MessageText color={passwordValidation.minLength ? "#7DDB69" : theme.colors.text.secondary}>
+                8개 문자 이상
+              </MessageText>
+            </PasswordValidationItem>
+            <PasswordValidationItem>
+              {passwordValidation.hasNumber ? <CheckIcon /> : <View style={{ width: 16, height: 16 }} />}
+              <MessageText color={passwordValidation.hasNumber ? "#7DDB69" : theme.colors.text.secondary}>
+                숫자 1개 이상
+              </MessageText>
+            </PasswordValidationItem>
+            <PasswordValidationItem>
+              {passwordValidation.hasSpecialChar ? <CheckIcon /> : <View style={{ width: 16, height: 16 }} />}
+              <MessageText color={passwordValidation.hasSpecialChar ? "#7DDB69" : theme.colors.text.secondary}>
+                특수문자 1개 이상
+              </MessageText>
+            </PasswordValidationItem>
+          </PasswordValidationContainer>
+        ) : !!errorText ? (
+          <MessageContainer>
+            <ErrorIcon />
+            <MessageText color={theme.colors.error}>{errorText}</MessageText>
+          </MessageContainer>
         ) : !!successText ? (
-          <SuccessText>{successText}</SuccessText>
+          <MessageContainer>
+            <CheckIcon />
+            <MessageText color="#7DDB69">{successText}</MessageText>
+          </MessageContainer>
         ) : !!helperText ? (
           <HelperText>{helperText}</HelperText>
         ) : null}

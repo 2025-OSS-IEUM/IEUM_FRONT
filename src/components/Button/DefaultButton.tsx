@@ -46,9 +46,10 @@ export const DefaultButton = ({
       {...props}
     >
       <CustomText
-        color={theme.colors.white}
+        color="#FFFFFF"
         size={theme.fontSize.md}
         weight="bold"
+        style={{ color: "#FFFFFF" }}
       >
         {children}
       </CustomText>
