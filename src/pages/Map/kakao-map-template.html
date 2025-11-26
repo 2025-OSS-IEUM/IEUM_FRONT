@@ -39,6 +39,7 @@
       var map = null;
       var currentMarker = null;
       var currentCircle = null;
+      var placesService = null;
 
       // 초기화
       kakao.maps.load(function () {
@@ -49,6 +50,7 @@
             level: 3,
           };
           map = new kakao.maps.Map(container, options);
+          placesService = new kakao.maps.services.Places();
           sendToRN("KAKAO_READY", { level: map.getLevel() });
         } catch (error) {
           sendToRN("KAKAO_ERROR", error.message);
@@ -110,10 +112,58 @@
               });
               currentCircle.setMap(map);
             }
+            return;
+          }
+
+          if (data.type === "SEARCH_KEYWORD") {
+            handleKeywordSearch(data.payload);
+            return;
           }
         } catch (e) {
           sendToRN("DEBUG", "Message parse error: " + e.message);
         }
+      }
+
+      function handleKeywordSearch(keyword) {
+        if (!keyword || typeof keyword !== "string") {
+          sendToRN("SEARCH_RESULT", []);
+          return;
+        }
+
+        var trimmedKeyword = keyword.trim();
+        if (!trimmedKeyword) {
+          sendToRN("SEARCH_RESULT", []);
+          return;
+        }
+
+        if (!placesService) {
+          placesService = new kakao.maps.services.Places();
+        }
+
+        placesService.keywordSearch(trimmedKeyword, function (result, status) {
+          if (status === kakao.maps.services.Status.OK) {
+            var normalized = result.map(function (place) {
+              return {
+                id: place.id || place.place_id || place.phone || place.address_name + "_" + place.x + "_" + place.y,
+                place_name: place.place_name || "",
+                address_name: place.address_name || "",
+                road_address_name: place.road_address_name || "",
+                x: place.x || "",
+                y: place.y || "",
+              };
+            });
+            sendToRN("SEARCH_RESULT", normalized);
+            return;
+          }
+
+          if (status === kakao.maps.services.Status.ZERO_RESULT) {
+            sendToRN("SEARCH_RESULT", []);
+            return;
+          }
+
+          sendToRN("KAKAO_ERROR", "Keyword search failed: " + status);
+          sendToRN("SEARCH_RESULT", []);
+        });
       }
     </script>
   </body>
