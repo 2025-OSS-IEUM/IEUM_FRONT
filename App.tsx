@@ -8,6 +8,7 @@ import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
 import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash, Login, SignUp } from "./src/pages";
+import { TtsProvider } from "./src/tts";
 
 type TabType = "map" | "home" | "profile" | "report";
 
@@ -106,7 +107,12 @@ export default function App() {
           />
         );
       case "profile":
-        return <Profile />;
+        return (
+          <Profile
+            onNavigateToReport={() => setActiveTab("report")}
+            onNavigateToReportDetails={() => setShowReportDetails(true)}
+          />
+        );
       case "report":
         return (
           <Report
@@ -222,14 +228,16 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider theme={theme}>
-        <MainContainer>
-          {renderPage()}
-          <Footer
-            initialTab={activeTab}
-            onTabChange={handleTabChange}
-          />
-        </MainContainer>
-        <StatusBar style="auto" />
+        <TtsProvider>
+          <MainContainer>
+            {renderPage()}
+            <Footer
+              initialTab={activeTab}
+              onTabChange={handleTabChange}
+            />
+          </MainContainer>
+          <StatusBar style="auto" />
+        </TtsProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

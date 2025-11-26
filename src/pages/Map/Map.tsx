@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  useRef,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import styled from "styled-components/native";
 import { ActivityIndicator, Animated, Easing, Platform } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
@@ -18,6 +12,7 @@ import { Container, CustomText } from "../../components";
 import { MapBottomSheet } from "./MapBottomSheet";
 import { MapSearch } from "./MapSearch";
 import { PlaceDetailSheet } from "./PlaceDetailSheet";
+import { useScreenReader } from "../../tts";
 
 const KAKAO_MAP_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY;
 const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
@@ -43,7 +38,7 @@ const DEFAULT_CENTER: Coordinate = {
 
 const MapWrapper = styled.View`
   flex: 1;
-  background-color: ${(props) => props.theme.colors.background};
+  background-color: ${props => props.theme.colors.background};
 `;
 
 const StyledWebView = styled(WebView)`
@@ -81,8 +76,8 @@ const GlassSearchCard = styled(BlurView)`
 
 const SearchText = styled(CustomText)`
   flex: 1;
-  color: ${(props) => props.theme.colors.text.secondary};
-  font-family: ${(props) => props.theme.fonts.medium};
+  color: ${props => props.theme.colors.text.secondary};
+  font-family: ${props => props.theme.fonts.medium};
   font-size: 16px;
 `;
 
@@ -114,8 +109,8 @@ const QuickInfoHeader = styled.View`
 
 const QuickInfoTitle = styled(CustomText)`
   font-size: 16px;
-  color: ${(props) => props.theme.colors.text.primary};
-  font-family: ${(props) => props.theme.fonts.semiBold};
+  color: ${props => props.theme.colors.text.primary};
+  font-family: ${props => props.theme.fonts.semiBold};
 `;
 
 const QuickInfoBadge = styled.View`
@@ -129,20 +124,20 @@ const QuickInfoBadge = styled.View`
 
 const QuickInfoBadgeText = styled(CustomText)`
   font-size: 12px;
-  color: ${(props) => props.theme.colors.primary};
-  font-family: ${(props) => props.theme.fonts.bold};
+  color: ${props => props.theme.colors.primary};
+  font-family: ${props => props.theme.fonts.bold};
 `;
 
 const QuickInfoSubtitle = styled(CustomText)`
   font-size: 14px;
-  color: ${(props) => props.theme.colors.text.secondary};
-  font-family: ${(props) => props.theme.fonts.primary};
+  color: ${props => props.theme.colors.text.secondary};
+  font-family: ${props => props.theme.fonts.primary};
 `;
 
 const QuickInfoDistance = styled(CustomText)`
   font-size: 28px;
-  color: ${(props) => props.theme.colors.text.primary};
-  font-family: ${(props) => props.theme.fonts.bold};
+  color: ${props => props.theme.colors.text.primary};
+  font-family: ${props => props.theme.fonts.bold};
   margin-bottom: 4px;
 `;
 
@@ -176,8 +171,8 @@ const FloatingGradient = styled(LinearGradient)`
 const FloatingButtonLabel = styled(CustomText)`
   margin-top: 6px;
   font-size: 12px;
-  color: ${(props) => props.theme.colors.text.secondary};
-  font-family: ${(props) => props.theme.fonts.medium};
+  color: ${props => props.theme.colors.text.secondary};
+  font-family: ${props => props.theme.fonts.medium};
   text-align: center;
 `;
 
@@ -285,21 +280,13 @@ const getInstructionFromGuide = (guide: Guide, distance: number) => {
   return `${roundedDist}m 앞 ${guide.guidance}`;
 };
 
-const calculateDistance = (
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-) => {
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const d = R * c;
   return Math.round(d * 1000);
@@ -571,18 +558,12 @@ const generateKakaoMapTemplate = (apiKey: string) => `
   </html>
 `;
 
-export const Map = ({
-  onNavigateToReport,
-}: {
-  onNavigateToReport?: () => void;
-}) => {
+export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void }) => {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
 
-  const [currentCoordinate, setCurrentCoordinate] =
-    useState<Coordinate>(DEFAULT_CENTER);
-  const [locationLabel, setLocationLabel] =
-    useState("위치 정보 불러오는 중...");
+  const [currentCoordinate, setCurrentCoordinate] = useState<Coordinate>(DEFAULT_CENTER);
+  const [locationLabel, setLocationLabel] = useState("위치 정보 불러오는 중...");
   const [isLocating, setIsLocating] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -604,6 +585,8 @@ export const Map = ({
   const [heading, setHeading] = useState<number | null>(null);
   const uiIntro = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const [hasReadInitialLocation, setHasReadInitialLocation] = useState(false);
+  const [hasReadDestination, setHasReadDestination] = useState(false);
 
   const mapTemplate = useMemo(() => {
     if (!KAKAO_MAP_KEY) return "";
@@ -626,10 +609,7 @@ export const Map = ({
       }
       if (data.type === "SEARCH_RESULT") {
         if (__DEV__) {
-          console.log(
-            "[Map] WebView SEARCH_RESULT:",
-            Array.isArray(data.payload) ? data.payload.length : data.payload
-          );
+          console.log("[Map] WebView SEARCH_RESULT:", Array.isArray(data.payload) ? data.payload.length : data.payload);
         }
         setSearchResults(data.payload);
         setIsSearching(false);
@@ -699,9 +679,7 @@ export const Map = ({
 
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(
-            `Status ${response.status} ${response.statusText}: ${errorText}`
-          );
+          throw new Error(`Status ${response.status} ${response.statusText}: ${errorText}`);
         }
 
         const data = await response.json();
@@ -713,18 +691,14 @@ export const Map = ({
           );
         }
         if (Array.isArray(data?.documents)) {
-          const normalized: Place[] = data.documents.map(
-            (doc: any, index: number) => ({
-              id:
-                doc?.id ||
-                `${doc?.x || "0"}_${doc?.y || "0"}_${doc?.place_name || index}`,
-              place_name: doc?.place_name || "",
-              address_name: doc?.address_name || "",
-              road_address_name: doc?.road_address_name || "",
-              x: doc?.x || "0",
-              y: doc?.y || "0",
-            })
-          );
+          const normalized: Place[] = data.documents.map((doc: any, index: number) => ({
+            id: doc?.id || `${doc?.x || "0"}_${doc?.y || "0"}_${doc?.place_name || index}`,
+            place_name: doc?.place_name || "",
+            address_name: doc?.address_name || "",
+            road_address_name: doc?.road_address_name || "",
+            x: doc?.x || "0",
+            y: doc?.y || "0",
+          }));
           setSearchResults(normalized);
         } else {
           setSearchResults([]);
@@ -773,10 +747,7 @@ export const Map = ({
   };
 
   const getWalkingRoute = useCallback(
-    async (
-      origin: Coordinate,
-      destination: Coordinate
-    ): Promise<RouteData | null> => {
+    async (origin: Coordinate, destination: Coordinate): Promise<RouteData | null> => {
       if (!KAKAO_REST_API_KEY) {
         console.warn("카카오 REST API 키가 설정되지 않았습니다.");
         return null;
@@ -825,9 +796,7 @@ export const Map = ({
             statusText: response.statusText,
             body: errorMessage,
           });
-          throw new Error(
-            `HTTP error! Status: ${response.status}, Message: ${errorMessage}`
-          );
+          throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorMessage}`);
         }
 
         const data = await response.json();
@@ -836,12 +805,7 @@ export const Map = ({
         const linePath: Coordinate[] = [];
         const guides: Guide[] = [];
 
-        if (
-          data.routes &&
-          data.routes[0] &&
-          data.routes[0].sections &&
-          data.routes[0].sections[0]
-        ) {
+        if (data.routes && data.routes[0] && data.routes[0].sections && data.routes[0].sections[0]) {
           const section = data.routes[0].sections[0];
 
           if (section.roads) {
@@ -898,9 +862,9 @@ export const Map = ({
     setDistance(dist);
 
     // 최근 선택한 장소에 추가 (최대 5개, 중복 제거)
-    setRecentPlaces((prev) => {
+    setRecentPlaces(prev => {
       // 중복 제거 (같은 id가 있으면 제거)
-      const filtered = prev.filter((p) => p.id !== place.id);
+      const filtered = prev.filter(p => p.id !== place.id);
       // 새로운 장소를 맨 앞에 추가
       const updated = [place, ...filtered];
       // 최대 5개까지만 유지
@@ -921,23 +885,20 @@ export const Map = ({
     }
   };
 
-  const sendRouteToWebView = useCallback(
-    (place: Place, route: Coordinate[]) => {
-      if (!webViewRef.current) {
-        return;
-      }
-      webViewRef.current.postMessage(
-        JSON.stringify({
-          type: "SET_DESTINATION",
-          payload: {
-            place,
-            routePath: route,
-          },
-        })
-      );
-    },
-    []
-  );
+  const sendRouteToWebView = useCallback((place: Place, route: Coordinate[]) => {
+    if (!webViewRef.current) {
+      return;
+    }
+    webViewRef.current.postMessage(
+      JSON.stringify({
+        type: "SET_DESTINATION",
+        payload: {
+          place,
+          routePath: route,
+        },
+      })
+    );
+  }, []);
 
   const buildRouteBetween = useCallback(
     async (origin: Coordinate, place: Place) => {
@@ -953,34 +914,19 @@ export const Map = ({
       if (guides.length > 0) {
         // 첫 번째 가이드 설정
         const firstGuide = guides[0];
-        const dist = calculateDistance(
-          origin.latitude,
-          origin.longitude,
-          firstGuide.y,
-          firstGuide.x
-        );
+        const dist = calculateDistance(origin.latitude, origin.longitude, firstGuide.y, firstGuide.x);
         setCurrentInstruction(getInstructionFromGuide(firstGuide, dist));
       } else {
         setCurrentInstruction("목적지까지 직진입니다");
       }
 
       setDistance(
-        calculateDistance(
-          origin.latitude,
-          origin.longitude,
-          destinationCoord.latitude,
-          destinationCoord.longitude
-        )
+        calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
       );
       sendRouteToWebView(place, path);
       return path;
     },
-    [
-      calculateDistance,
-      getCoordinateFromPlace,
-      getWalkingRoute,
-      sendRouteToWebView,
-    ]
+    [calculateDistance, getCoordinateFromPlace, getWalkingRoute, sendRouteToWebView]
   );
 
   const beginNavigation = useCallback(async () => {
@@ -1004,12 +950,7 @@ export const Map = ({
     (coord: Coordinate, path: Coordinate[]) => {
       if (!path || path.length === 0) return Infinity;
       return path.reduce((minDistance, point) => {
-        const dist = calculateDistance(
-          coord.latitude,
-          coord.longitude,
-          point.latitude,
-          point.longitude
-        );
+        const dist = calculateDistance(coord.latitude, coord.longitude, point.latitude, point.longitude);
         return Math.min(minDistance, dist);
       }, Infinity);
     },
@@ -1025,12 +966,7 @@ export const Map = ({
       let minDistance = Infinity;
 
       for (const guide of routeGuides) {
-        const dist = calculateDistance(
-          coord.latitude,
-          coord.longitude,
-          guide.y,
-          guide.x
-        );
+        const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
 
         // 이미 지나간 가이드인지 판단 (단순 거리만으로는 부족할 수 있으나,
         // 순차적으로 체크하거나 bearing 등을 고려해야 함. 여기서는 단순화하여 가장 가까운 것을 찾음)
@@ -1069,9 +1005,7 @@ export const Map = ({
         setHasRouteDeviation(true);
         setIsRecalculatingRoute(true);
         try {
-          await Haptics.notificationAsync(
-            Haptics.NotificationFeedbackType.Warning
-          );
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         } catch {
           // ignore haptics failure
         }
@@ -1130,10 +1064,21 @@ export const Map = ({
 
         const [result] = await Location.reverseGeocodeAsync(newCoord);
         if (result) {
-          const addressText = [result.region, result.city, result.street]
-            .filter(Boolean)
-            .join(" ");
+          // 상세 주소 조합: 시/도 + 시/군/구 + 읍/면/동 + 상세주소(name)
+          const parts = [result.region, result.city, result.district, result.street, result.name].filter(
+            (part): part is string => !!part
+          );
+
+          // 중복 제거
+          const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
+
+          const addressText = uniqueParts.join(" ");
           setLocationLabel(addressText || "현재 위치");
+
+          // 처음 위치를 불러왔을 때만 읽기
+          if (!hasReadInitialLocation && addressText) {
+            setHasReadInitialLocation(true);
+          }
         }
       } catch (error) {
         setLocationLabel("위치 불러오기 실패");
@@ -1141,7 +1086,7 @@ export const Map = ({
         setIsLocating(false);
       }
     },
-    [destination, rerouteIfNecessary]
+    [destination, rerouteIfNecessary, hasReadInitialLocation]
   );
 
   useEffect(() => {
@@ -1158,7 +1103,7 @@ export const Map = ({
           return;
         }
 
-        headingSubscription = await Location.watchHeadingAsync((location) => {
+        headingSubscription = await Location.watchHeadingAsync(location => {
           if (location.trueHeading >= 0) {
             setHeading(location.trueHeading);
           } else if (location.magHeading >= 0) {
@@ -1294,15 +1239,50 @@ export const Map = ({
       },
     ],
   };
+  // TTS로 읽을 텍스트 생성
+  const mapScreenText = useMemo(() => {
+    // 목적지가 설정되었을 때만 읽기 (한 번만)
+    if (destination && distance !== null && !hasReadDestination) {
+      return `지도 화면입니다. 현재 위치는 ${locationLabel}입니다. 목적지는 ${destination.place_name}이며, 약 ${distance}미터 떨어져 있습니다.`;
+    } else if (
+      locationLabel &&
+      locationLabel !== "위치 정보 불러오는 중..." &&
+      hasReadInitialLocation &&
+      !destination &&
+      !hasReadDestination
+    ) {
+      // 처음 위치를 불러왔을 때만 읽기 (목적지가 없을 때, 한 번만)
+      return `지도 화면입니다. 현재 위치는 ${locationLabel}입니다.`;
+    }
+    return "";
+  }, [locationLabel, destination, distance, hasReadInitialLocation, hasReadDestination]);
+
+  // 목적지가 설정되었을 때 플래그 업데이트
+  useEffect(() => {
+    if (destination && distance !== null && !hasReadDestination) {
+      setHasReadDestination(true);
+    }
+  }, [destination, distance, hasReadDestination]);
+
+  // 화면 정보 읽기 (목적지가 설정되거나 처음 위치를 불러왔을 때만)
+  useScreenReader(mapScreenText, { delay: 800, skipIfEmpty: true });
 
   if (!KAKAO_MAP_KEY) {
     return (
       <Container>
         <MissingKeyContainer>
-          <CustomText size={18} weight="bold" style={{ marginBottom: 8 }}>
+          <CustomText
+            size={18}
+            weight="bold"
+            style={{ marginBottom: 8 }}
+          >
             카카오맵 API Key가 필요합니다
           </CustomText>
-          <CustomText size={14} color="#666666" style={{ textAlign: "center" }}>
+          <CustomText
+            size={14}
+            color="#666666"
+            style={{ textAlign: "center" }}
+          >
             .env 파일 설정을 확인해주세요.
           </CustomText>
         </MissingKeyContainer>
@@ -1326,15 +1306,21 @@ export const Map = ({
 
         <OverlayContainer style={{ paddingTop: insets.top + 12 }}>
           {!isPlaying && (
-            <SearchCardWrapper
-              style={[overlayAnimationStyle, mapCardShadow || undefined]}
-            >
+            <SearchCardWrapper style={[overlayAnimationStyle, mapCardShadow || undefined]}>
               <SearchTouchable
                 activeOpacity={0.85}
                 onPress={() => setIsSearchVisible(true)}
               >
-                <GlassSearchCard intensity={65} tint="light">
-                  <Svg width="22" height="22" viewBox="0 0 20 20" fill="none">
+                <GlassSearchCard
+                  intensity={65}
+                  tint="light"
+                >
+                  <Svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                  >
                     <Path
                       d="M13.875 12.625L17.25 16"
                       stroke="#68D0C6"
@@ -1350,7 +1336,12 @@ export const Map = ({
                     />
                   </Svg>
                   <SearchText size={16}>{locationLabel}</SearchText>
-                  <Svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                  <Svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                  >
                     <Path
                       d="M8 5L15 12L8 19"
                       stroke="#68D0C6"
@@ -1378,14 +1369,11 @@ export const Map = ({
                     <QuickInfoBadgeText size={12}>LIVE</QuickInfoBadgeText>
                   </QuickInfoBadge>
                 </QuickInfoHeader>
-                <QuickInfoDistance>
-                  {distance ? `약 ${distance}m 남음` : "안내 준비 중"}
-                </QuickInfoDistance>
+                <QuickInfoDistance>{distance ? `약 ${distance}m 남음` : "안내 준비 중"}</QuickInfoDistance>
                 <QuickInfoSubtitle>
                   {isRecalculatingRoute
                     ? "경로를 재탐색하고 있어요"
-                    : destination?.place_name ||
-                      "목적지를 검색해 안내를 시작하세요"}
+                    : destination?.place_name || "목적지를 검색해 안내를 시작하세요"}
                 </QuickInfoSubtitle>
               </QuickInfoCard>
             </QuickInfoWrapper>
@@ -1394,12 +1382,7 @@ export const Map = ({
 
         <FloatingActionGroup style={floatingGroupStyle}>
           <SecondaryFloatingWrapper>
-            <FloatingButtonBase
-              style={[
-                floatingShadow || undefined,
-                locationButtonShadow || undefined,
-              ]}
-            >
+            <FloatingButtonBase style={[floatingShadow || undefined, locationButtonShadow || undefined]}>
               <PulseRing style={pulseStyle} />
               <FloatingButtonTouchable
                 activeOpacity={0.85}
@@ -1413,9 +1396,24 @@ export const Map = ({
                   {isLocating ? (
                     <ActivityIndicator color="#68D0C6" />
                   ) : (
-                    <Svg width="26" height="26" viewBox="0 0 21 21" fill="none">
-                      <Circle cx="10.5" cy="10.5" r="10" stroke="#68D0C6" />
-                      <Circle cx="10.5" cy="10.5" r="1.5" fill="#68D0C6" />
+                    <Svg
+                      width="26"
+                      height="26"
+                      viewBox="0 0 21 21"
+                      fill="none"
+                    >
+                      <Circle
+                        cx="10.5"
+                        cy="10.5"
+                        r="10"
+                        stroke="#68D0C6"
+                      />
+                      <Circle
+                        cx="10.5"
+                        cy="10.5"
+                        r="1.5"
+                        fill="#68D0C6"
+                      />
                       <Path
                         d="M10.5 1L10.5 4"
                         stroke="#68D0C6"
@@ -1445,7 +1443,10 @@ export const Map = ({
                 </FloatingGradient>
               </FloatingButtonTouchable>
             </FloatingButtonBase>
-            <FloatingButtonLabel size={11} align="center">
+            <FloatingButtonLabel
+              size={11}
+              align="center"
+            >
               내 위치
             </FloatingButtonLabel>
           </SecondaryFloatingWrapper>
@@ -1453,12 +1454,18 @@ export const Map = ({
 
         {/* MapBottomSheet가 올라왔을 때의 블러 처리 */}
         {isMapBlurred && !showPlaceDetail && isPlaying && (
-          <MapOverlay intensity={10} tint="dark" />
+          <MapOverlay
+            intensity={10}
+            tint="dark"
+          />
         )}
 
         {showPlaceDetail && selectedPlace && (
           <>
-            <MapOverlay intensity={10} tint="dark" />
+            <MapOverlay
+              intensity={10}
+              tint="dark"
+            />
             <BottomSheetWrapper>
               <PlaceDetailSheet
                 place={selectedPlace}
@@ -1484,25 +1491,19 @@ export const Map = ({
             */}
             <BottomSheetWrapper>
               <MapBottomSheet
-                destination={
-                  destination?.place_name || "목적지를 검색해 주세요"
-                }
+                destination={destination?.place_name || "목적지를 검색해 주세요"}
                 instruction={
                   isRecalculatingRoute
                     ? "경로를 재탐색하고 있어요"
                     : currentInstruction ||
-                      (distance
-                        ? `${distance}m 앞까지 직진입니다`
-                        : "목적지를 검색해 설정해주세요")
+                      (distance ? `${distance}m 앞까지 직진입니다` : "목적지를 검색해 설정해주세요")
                 }
                 isPlaying={isPlaying}
                 distance={distance || undefined}
                 isRecalculating={isRecalculatingRoute}
                 hasDeviation={hasRouteDeviation}
                 currentCoordinate={currentCoordinate}
-                destinationCoordinate={
-                  destination ? getCoordinateFromPlace(destination) : undefined
-                }
+                destinationCoordinate={destination ? getCoordinateFromPlace(destination) : undefined}
                 heading={heading}
                 onClose={() => {
                   setIsPlaying(false);
@@ -1520,7 +1521,6 @@ export const Map = ({
             </BottomSheetWrapper>
           </>
         )}
-
         {isSearchVisible && (
           <MapSearch
             onClose={() => setIsSearchVisible(false)}

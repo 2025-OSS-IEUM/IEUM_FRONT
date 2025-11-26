@@ -6,6 +6,7 @@ import Svg, { Path, SvgUri } from "react-native-svg";
 import { useAssets } from "expo-asset";
 import { Container } from "../../components";
 import { CustomText } from "../../components/Text";
+import { useScreenReader } from "../../tts";
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -235,7 +236,7 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
     ).start();
   }, []);
 
-  // 가입일 
+  // 가입일
   const registrationDate = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() - 1); // 하루 전
@@ -249,6 +250,13 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays + 1; // 최소 1일
   };
+
+  // TTS로 읽을 텍스트 생성
+  const daysConnected = getDaysConnected();
+  const homeScreenText = `이음이 홈 화면입니다. 이어진지 ${daysConnected}일 됐어요.`;
+
+  // 화면 로드 시 한 번만 읽기
+  useScreenReader(homeScreenText, { delay: 500, skipIfEmpty: true });
 
   // 강아지 터치 시 경험치 증가
   const handleDogTouch = () => {
