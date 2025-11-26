@@ -1,21 +1,12 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  Platform,
-  TouchableOpacity,
-  Animated,
-  Modal,
-  KeyboardAvoidingView,
-} from "react-native";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { Platform, TouchableOpacity, Animated, Modal, KeyboardAvoidingView } from "react-native";
 import styled from "styled-components/native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, SvgUri } from "react-native-svg";
 import { useAssets } from "expo-asset";
-import {
-  Container,
-  CustomText,
-  DefaultButton,
-  InputField,
-} from "../../components";
+import { Container, CustomText, DefaultButton, InputField } from "../../components";
+import { VoiceSettings } from "./VoiceSettings";
+import { useScreenReader } from "../../tts";
 
 const ProfileScroll = styled.ScrollView`
   flex: 1;
@@ -95,7 +86,7 @@ const SubLinkText = styled.Text`
   margin-bottom: 8px;
 
   margin-top: 4px;
-  font-family: ${(props) => props.theme.fonts.primary};
+  font-family: ${props => props.theme.fonts.primary};
 `;
 
 const StatsCardContainer = styled.View`
@@ -221,7 +212,12 @@ const Divider = styled.View`
 `;
 
 const ArrowIcon = () => (
-  <Svg width="12" height="24" viewBox="0 0 12 24" fill="none">
+  <Svg
+    width="12"
+    height="24"
+    viewBox="0 0 12 24"
+    fill="none"
+  >
     <Path
       d="M2.45199 6.57999L3.51299 5.51999L9.29199 11.297C9.38514 11.3896 9.45907 11.4996 9.50952 11.6209C9.55997 11.7421 9.58594 11.8722 9.58594 12.0035C9.58594 12.1348 9.55997 12.2648 9.50952 12.3861C9.45907 12.5073 9.38514 12.6174 9.29199 12.71L3.51299 18.49L2.45299 17.43L7.87699 12.005L2.45199 6.57999Z"
       fill="#797979"
@@ -230,7 +226,12 @@ const ArrowIcon = () => (
 );
 
 const BackIcon = () => (
-  <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+  <Svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+  >
     <Path
       d="M15 18L9 12L15 6"
       stroke="#4b4b4b"
@@ -242,7 +243,12 @@ const BackIcon = () => (
 );
 
 const EditIcon = () => (
-  <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <Svg
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
+    fill="none"
+  >
     <Path
       d="M11.3333 2.00004C11.5084 1.82493 11.7163 1.68605 11.9447 1.59129C12.1731 1.49654 12.4173 1.44775 12.6639 1.44775C12.9105 1.44775 13.1547 1.49654 13.3831 1.59129C13.6115 1.68605 13.8194 1.82493 13.9945 2.00004C14.1696 2.17515 14.3085 2.38305 14.4032 2.61146C14.498 2.83987 14.5468 3.08405 14.5468 3.33071C14.5468 3.57737 14.498 3.82155 14.4032 4.04996C14.3085 4.27837 14.1696 4.48627 13.9945 4.66138L5.17667 13.4792L1.33334 14.6667L2.52084 10.8234L11.3333 2.00004Z"
       stroke="#4b4b4b"
@@ -294,7 +300,12 @@ const ProfileGradient = styled(LinearGradient)`
 `;
 
 const DefaultProfileIcon = () => (
-  <Svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+  <Svg
+    width="80"
+    height="80"
+    viewBox="0 0 80 80"
+    fill="none"
+  >
     <Path
       d="M40 40C47.4558 40 53.5 33.9558 53.5 26.5C53.5 19.0442 47.4558 13 40 13C32.5442 13 26.5 19.0442 26.5 26.5C26.5 33.9558 32.5442 40 40 40Z"
       fill="#ffffff"
@@ -459,10 +470,16 @@ const statsData = [
 ];
 
 const reportLinks = ["제보하기", "제보 내역", "신고하기"];
-const settingLinks = ["즐겨찾기", "공지사항", "계정", "로그아웃"];
+const settingLinks = ["즐겨찾기", "음성 설정", "계정", "로그아웃"];
 
-export const Profile = () => {
+interface ProfileProps {
+  onNavigateToReport?: () => void;
+  onNavigateToReportDetails?: () => void;
+}
+
+export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: ProfileProps) => {
   const [showMyInfo, setShowMyInfo] = useState(false);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [userName, setUserName] = useState("홍길동");
@@ -629,6 +646,23 @@ export const Profile = () => {
     outputRange: ["0deg", "10deg"],
   });
 
+  // TTS로 읽을 텍스트 생성 (메인 프로필 화면일 때만)
+  const profileScreenText = useMemo(() => {
+    if (showMyInfo || showVoiceSettings) {
+      return ""; // 내 정보나 음성 설정 화면일 때는 읽지 않음
+    }
+    const text = `내 정보 페이지입니다. ${userName}님, 반가워요!`;
+    console.log("[Profile] TTS Text:", text);
+    return text;
+  }, [userName, showMyInfo, showVoiceSettings]);
+
+  // 화면 정보 읽기
+  useScreenReader(profileScreenText, { delay: 500, skipIfEmpty: true });
+
+  if (showVoiceSettings) {
+    return <VoiceSettings onNavigateBack={() => setShowVoiceSettings(false)} />;
+  }
+
   if (showMyInfo) {
     return (
       <Container backgroundColor="#f8f9fb">
@@ -642,7 +676,10 @@ export const Profile = () => {
             </HeaderBackButton>
           </HeaderLeft>
           <HeaderCenter>
-            <HeaderTitle size={20} weight="700">
+            <HeaderTitle
+              size={20}
+              weight="700"
+            >
               내 정보
             </HeaderTitle>
           </HeaderCenter>
@@ -654,13 +691,13 @@ export const Profile = () => {
         >
           <MyInfoContent>
             <ProfileImageWrapper>
-              <TouchableOpacity onPress={handleProfilePress} activeOpacity={1}>
+              <TouchableOpacity
+                onPress={handleProfilePress}
+                activeOpacity={1}
+              >
                 <ProfileImageContainer
                   style={{
-                    transform: [
-                      { scale: profileScale },
-                      { rotate: profileRotate },
-                    ],
+                    transform: [{ scale: profileScale }, { rotate: profileRotate }],
                   }}
                 >
                   <ProfileGradient
@@ -675,12 +712,13 @@ export const Profile = () => {
             </ProfileImageWrapper>
 
             <NameContainer style={{ transform: [{ scale: nameScale }] }}>
-              <TouchableOpacity onPress={handleNamePress} activeOpacity={1}>
+              <TouchableOpacity
+                onPress={handleNamePress}
+                activeOpacity={1}
+              >
                 <NameText>{userName}</NameText>
               </TouchableOpacity>
-              <EditButtonAnimated
-                style={{ transform: [{ scale: editButtonScale }] }}
-              >
+              <EditButtonAnimated style={{ transform: [{ scale: editButtonScale }] }}>
                 <TouchableOpacity
                   onPress={handleEditNamePress}
                   activeOpacity={0.7}
@@ -700,16 +738,25 @@ export const Profile = () => {
               ]}
             >
               <InfoRow>
-                <InfoLabel size={14} weight="600">
+                <InfoLabel
+                  size={14}
+                  weight="600"
+                >
                   아이디
                 </InfoLabel>
-                <InfoValue size={16} color="#797979">
+                <InfoValue
+                  size={16}
+                  color="#797979"
+                >
                   honghong12
                 </InfoValue>
               </InfoRow>
               <InfoDivider />
               <InfoRow>
-                <InfoLabel size={14} weight="600">
+                <InfoLabel
+                  size={14}
+                  weight="600"
+                >
                   이메일
                 </InfoLabel>
                 {isEditingEmail ? (
@@ -722,17 +769,26 @@ export const Profile = () => {
                     containerStyle={{ width: "100%", marginBottom: 0 }}
                   />
                 ) : (
-                  <InfoValue size={16} color="#797979">
+                  <InfoValue
+                    size={16}
+                    color="#797979"
+                  >
                     {userEmail}
                   </InfoValue>
                 )}
               </InfoRow>
               <InfoDivider />
               <InfoRow>
-                <InfoLabel size={14} weight="600">
+                <InfoLabel
+                  size={14}
+                  weight="600"
+                >
                   전화번호
                 </InfoLabel>
-                <InfoValue size={16} color="#797979">
+                <InfoValue
+                  size={16}
+                  color="#797979"
+                >
                   010-1234-5678
                 </InfoValue>
               </InfoRow>
@@ -741,20 +797,27 @@ export const Profile = () => {
             <EditButtonContainer>
               {isEditingEmail ? (
                 <ModalButtonContainer>
-                  <CancelButton onPress={handleCancelEmail} activeOpacity={0.7}>
+                  <CancelButton
+                    onPress={handleCancelEmail}
+                    activeOpacity={0.7}
+                  >
                     <CancelButtonText>취소</CancelButtonText>
                   </CancelButton>
-                  <BounceButton
-                    style={{ flex: 1, transform: [{ scale: buttonScale }] }}
-                  >
-                    <SaveButton onPress={handleButtonPress} activeOpacity={0.8}>
+                  <BounceButton style={{ flex: 1, transform: [{ scale: buttonScale }] }}>
+                    <SaveButton
+                      onPress={handleButtonPress}
+                      activeOpacity={0.8}
+                    >
                       <SaveButtonText>저장</SaveButtonText>
                     </SaveButton>
                   </BounceButton>
                 </ModalButtonContainer>
               ) : (
                 <BounceButton style={{ transform: [{ scale: buttonScale }] }}>
-                  <DefaultButton fullWidth onPress={handleButtonPress}>
+                  <DefaultButton
+                    fullWidth
+                    onPress={handleButtonPress}
+                  >
                     수정하기
                   </DefaultButton>
                 </BounceButton>
@@ -787,7 +850,7 @@ export const Profile = () => {
               />
               <TouchableOpacity
                 activeOpacity={1}
-                onPress={(e) => e.stopPropagation()}
+                onPress={e => e.stopPropagation()}
               >
                 <ModalContent
                   style={
@@ -819,7 +882,10 @@ export const Profile = () => {
                     >
                       <CancelButtonText>취소</CancelButtonText>
                     </CancelButton>
-                    <SaveButton onPress={handleSaveName} activeOpacity={0.8}>
+                    <SaveButton
+                      onPress={handleSaveName}
+                      activeOpacity={0.8}
+                    >
                       <SaveButtonText>저장</SaveButtonText>
                     </SaveButton>
                   </ModalButtonContainer>
@@ -835,7 +901,10 @@ export const Profile = () => {
   return (
     <Container backgroundColor="#f8f9fb">
       <Header>
-        <HeaderTitle size={20} weight="semibold">
+        <HeaderTitle
+          size={20}
+          weight="semibold"
+        >
           내 정보
         </HeaderTitle>
       </Header>
@@ -845,10 +914,16 @@ export const Profile = () => {
       >
         <ContentWrapper>
           <GreetingCard>
-            <GreetingText size={21} weight="700">
+            <GreetingText
+              size={21}
+              weight="700"
+            >
               {userName}님, 반가워요!
             </GreetingText>
-            <SubLink onPress={() => setShowMyInfo(true)} activeOpacity={0.7}>
+            <SubLink
+              onPress={() => setShowMyInfo(true)}
+              activeOpacity={0.7}
+            >
               <SubLinkText>내 정보</SubLinkText>
               <SubLinkArrow>
                 <ArrowIcon />
@@ -867,10 +942,17 @@ export const Profile = () => {
                   {statsData.map((item, index) => (
                     <React.Fragment key={item.label}>
                       <StatItem>
-                        <StatValue size={38} weight="700" color="white">
+                        <StatValue
+                          size={38}
+                          weight="700"
+                          color="white"
+                        >
                           {item.value}
                         </StatValue>
-                        <StatLabel size={15} color="white">
+                        <StatLabel
+                          size={15}
+                          color="white"
+                        >
                           {item.label}
                         </StatLabel>
                       </StatItem>
@@ -882,22 +964,41 @@ export const Profile = () => {
             </StatsCardWrapper>
             {dogUri && (
               <DogFigure>
-                <SvgUri uri={dogUri} width="100%" height="100%" />
+                <SvgUri
+                  uri={dogUri}
+                  width="100%"
+                  height="100%"
+                />
               </DogFigure>
             )}
           </StatsCardContainer>
 
           <Section>
             <SectionHeader>
-              <SectionTitle size={18} weight="600">
+              <SectionTitle
+                size={18}
+                weight="600"
+              >
                 제보
               </SectionTitle>
             </SectionHeader>
             <SectionCard>
               {reportLinks.map((label, index) => (
                 <React.Fragment key={label}>
-                  <Row activeOpacity={0.7}>
-                    <RowLabel size={16} weight="300">
+                  <Row
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      if (label === "제보하기") {
+                        onNavigateToReport?.();
+                      } else if (label === "제보 내역") {
+                        onNavigateToReportDetails?.();
+                      }
+                    }}
+                  >
+                    <RowLabel
+                      size={16}
+                      weight="300"
+                    >
                       {label}
                     </RowLabel>
                     <ArrowWrapper>
@@ -912,15 +1013,28 @@ export const Profile = () => {
 
           <Section>
             <SectionHeader>
-              <SectionTitle size={18} weight="600">
+              <SectionTitle
+                size={18}
+                weight="600"
+              >
                 설정
               </SectionTitle>
             </SectionHeader>
             <SectionCard>
               {settingLinks.map((label, index) => (
                 <React.Fragment key={label}>
-                  <Row activeOpacity={0.7}>
-                    <RowLabel size={16} weight="300">
+                  <Row
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      if (label === "음성 설정") {
+                        setShowVoiceSettings(true);
+                      }
+                    }}
+                  >
+                    <RowLabel
+                      size={16}
+                      weight="300"
+                    >
                       {label}{" "}
                     </RowLabel>
                     <ArrowWrapper>

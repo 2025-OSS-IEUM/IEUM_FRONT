@@ -1,18 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import {
-  Platform,
-  Animated,
-  TouchableOpacity,
-  PanResponder,
-} from "react-native";
+import { Platform, Animated, TouchableOpacity, PanResponder, Alert } from "react-native";
 import styled from "styled-components/native";
-import Svg, {
-  Path,
-  Defs,
-  LinearGradient,
-  Stop,
-  Circle,
-} from "react-native-svg";
+import Svg, { Path, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
+import { useTts } from "../../tts";
 import { theme } from "../../styles/theme";
 
 interface MapBottomSheetProps {
@@ -57,8 +47,7 @@ const BottomSheetContainer = styled.View`
   position: relative;
 `;
 
-const AnimatedBottomSheet =
-  Animated.createAnimatedComponent(BottomSheetContainer);
+const AnimatedBottomSheet = Animated.createAnimatedComponent(BottomSheetContainer);
 
 const HandleBarWrapper = styled.View`
   width: 100%;
@@ -90,7 +79,7 @@ const AudioWaveContainer = styled.View`
 
 const AudioBar = styled.View<{ height: number }>`
   width: 1px;
-  height: ${(props) => props.height}px;
+  height: ${props => props.height}px;
   background-color: #68d0c6;
   border-radius: 0.5px;
 `;
@@ -114,18 +103,18 @@ const ArrowWrapper = styled.View`
 `;
 
 const DestinationText = styled.Text`
-  color: ${(props) => props.theme.colors.placeholder};
+  color: ${props => props.theme.colors.placeholder};
   text-align: center;
-  font-family: ${(props) => props.theme.fonts.semiBold};
+  font-family: ${props => props.theme.fonts.semiBold};
   font-size: 14px;
   margin-bottom: 10px;
   letter-spacing: -0.3px;
 `;
 
 const InstructionText = styled.Text`
-  color: ${(props) => props.theme.colors.text.primary};
+  color: ${props => props.theme.colors.text.primary};
   text-align: center;
-  font-family: ${(props) => props.theme.fonts.extraBold};
+  font-family: ${props => props.theme.fonts.extraBold};
   font-size: 20px;
   line-height: 28px;
   letter-spacing: -0.5px;
@@ -143,9 +132,9 @@ const StatusPill = styled.View`
 `;
 
 const StatusPillText = styled.Text`
-  color: ${(props) => props.theme.colors.error};
+  color: ${props => props.theme.colors.error};
   text-align: center;
-  font-family: ${(props) => props.theme.fonts.bold};
+  font-family: ${props => props.theme.fonts.bold};
   font-size: 13px;
 `;
 
@@ -153,7 +142,7 @@ const DistanceText = styled.Text`
   margin-top: 8px;
   color: #0076ef;
   text-align: center;
-  font-family: ${(props) => props.theme.fonts.extraBold};
+  font-family: ${props => props.theme.fonts.extraBold};
   font-size: 16px;
 `;
 
@@ -170,24 +159,16 @@ const ActionButton = styled.TouchableOpacity<{
   flex: 1;
   height: 46px;
   border-radius: 14px;
-  background-color: ${(props) =>
-    props.variant === "danger" ? "#FFF5F5" : "#F8FAFC"};
+  background-color: ${props => (props.variant === "danger" ? "#FFF5F5" : "#F8FAFC")};
   align-items: center;
   justify-content: center;
-  border: 1px solid
-    ${(props) =>
-      props.variant === "danger"
-        ? props.theme.colors.error
-        : props.theme.colors.border};
+  border: 1px solid ${props => (props.variant === "danger" ? props.theme.colors.error : props.theme.colors.border)};
 `;
 
 const ActionButtonText = styled.Text<{ variant?: "danger" | "secondary" }>`
-  font-family: ${(props) => props.theme.fonts.bold};
+  font-family: ${props => props.theme.fonts.bold};
   font-size: 15px;
-  color: ${(props) =>
-    props.variant === "danger"
-      ? props.theme.colors.error
-      : props.theme.colors.text.secondary};
+  color: ${props => (props.variant === "danger" ? props.theme.colors.error : props.theme.colors.text.secondary)};
 `;
 
 const toRadians = (deg: number) => (deg * Math.PI) / 180;
@@ -202,9 +183,7 @@ const calculateBearing = (
   const dLon = toRadians(to.longitude - from.longitude);
 
   const y = Math.sin(dLon) * Math.cos(lat2);
-  const x =
-    Math.cos(lat1) * Math.sin(lat2) -
-    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
   const brng = (Math.atan2(y, x) * 180) / Math.PI;
   return (brng + 360) % 360;
 };
@@ -226,8 +205,22 @@ export const MapBottomSheet = ({
   routePath, // Add routePath prop
   onBlurMap,
 }: MapBottomSheetProps) => {
+  const { speak } = useTts();
   const [barHeights, setBarHeights] = useState<number[]>([]);
   const animationInterval = useRef<NodeJS.Timeout | null>(null);
+  const lastInstructionRef = useRef<string>("");
+
+  useEffect(() => {
+    // instruction이 변경되었고, 비어있지 않을 때만 읽기
+    if (instruction && instruction !== lastInstructionRef.current && isPlaying) {
+      lastInstructionRef.current = instruction;
+      // instruction이 변경될 때마다 읽음 (거리 정보 포함)
+      // "직진입니다"가 포함된 멘트는 음성 안내에서 제외
+      if (!instruction.includes("직진입니다")) {
+        speak(instruction);
+      }
+    }
+  }, [instruction, isPlaying, speak]);
 
   useEffect(() => {
     if (onBlurMap) {
@@ -267,8 +260,7 @@ export const MapBottomSheet = ({
       },
       onPanResponderRelease: (_, gestureState) => {
         panY.flattenOffset();
-        const currentY =
-          (isCollapsed.current ? COLLAPSED_Y : 0) + gestureState.dy;
+        const currentY = (isCollapsed.current ? COLLAPSED_Y : 0) + gestureState.dy;
 
         let shouldCollapse = false;
         if (gestureState.vy > 0.5) {
@@ -300,15 +292,12 @@ export const MapBottomSheet = ({
   const barCount = 50;
 
   useEffect(() => {
-    const initialHeights = Array.from(
-      { length: barCount },
-      () => Math.random() * 26 + 2
-    );
+    const initialHeights = Array.from({ length: barCount }, () => Math.random() * 26 + 2);
     setBarHeights(initialHeights);
 
     if (isPlaying) {
       const animateBars = () => {
-        setBarHeights((prev) => prev.map(() => Math.random() * 26 + 2));
+        setBarHeights(prev => prev.map(() => Math.random() * 26 + 2));
       };
       animationInterval.current = setInterval(animateBars, 100);
     }
@@ -355,16 +344,56 @@ export const MapBottomSheet = ({
     return diff;
   }, [bearingToDestination, heading]);
 
+  const handleStopNavigation = () => {
+    Alert.alert(
+      "안내 종료",
+      "안내를 종료하시겠습니까?",
+      [
+        {
+          text: "취소",
+          style: "cancel",
+        },
+        {
+          text: "종료",
+          onPress: onClose,
+          style: "destructive",
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
+  // 주기적으로 목적지 방향 안내 (15초 간격)
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const interval = setInterval(() => {
+      if (arrowRotation !== undefined) {
+        // 12시 방향을 0도로 기준
+        const degree = arrowRotation;
+
+        // 시계 방향으로 변환 (1시~12시)
+        // 0도(12시) -> 30도(1시) -> ...
+        let clockDirection = Math.round(degree / 30);
+        if (clockDirection === 0) clockDirection = 12;
+
+        // 정면(12시) 근처일 경우 (11시~1시 사이) 생략 또는 안내
+        if (clockDirection !== 12 && clockDirection !== 11 && clockDirection !== 1) {
+          speak(`목적지는 ${clockDirection}시 방향에 있습니다`);
+        }
+      }
+    }, 15000); // 15초마다
+
+    return () => clearInterval(interval);
+  }, [isPlaying, arrowRotation, speak]);
+
   if (!isPlaying) {
     return null;
   }
 
   return (
     <AnimatedBottomSheet
-      style={[
-        bottomSheetShadow || undefined,
-        enableDrag ? { transform: [{ translateY: panY }] } : undefined,
-      ]}
+      style={[bottomSheetShadow || undefined, enableDrag ? { transform: [{ translateY: panY }] } : undefined]}
       {...(enableDrag ? panResponder.panHandlers : {})}
     >
       <HandleBarWrapper>
@@ -374,13 +403,21 @@ export const MapBottomSheet = ({
       {isPlaying && barHeights.length > 0 && (
         <AudioWaveContainer>
           {barHeights.map((height, index) => (
-            <AudioBar key={index} height={height} />
+            <AudioBar
+              key={index}
+              height={height}
+            />
           ))}
         </AudioWaveContainer>
       )}
 
       <DirectionContainer>
-        <Svg width="105" height="105" viewBox="0 0 150 150" fill="none">
+        <Svg
+          width="105"
+          height="105"
+          viewBox="0 0 150 150"
+          fill="none"
+        >
           <Defs>
             <LinearGradient
               id="paint0_linear_334_367"
@@ -391,7 +428,10 @@ export const MapBottomSheet = ({
               gradientUnits="userSpaceOnUse"
             >
               <Stop stopColor="#68D0C6" />
-              <Stop offset="1" stopColor="#0076EF" />
+              <Stop
+                offset="1"
+                stopColor="#0076EF"
+              />
             </LinearGradient>
           </Defs>
           <Circle
@@ -407,7 +447,12 @@ export const MapBottomSheet = ({
             transform: [{ rotate: `${arrowRotation ?? 0}deg` }],
           }}
         >
-          <Svg width="48" height="57" viewBox="0 0 69 82" fill="none">
+          <Svg
+            width="48"
+            height="57"
+            viewBox="0 0 69 82"
+            fill="none"
+          >
             <Defs>
               <LinearGradient
                 id="paint0_linear_334_356"
@@ -418,7 +463,10 @@ export const MapBottomSheet = ({
                 gradientUnits="userSpaceOnUse"
               >
                 <Stop stopColor="#68D0C6" />
-                <Stop offset="1" stopColor="#0076EF" />
+                <Stop
+                  offset="1"
+                  stopColor="#0076EF"
+                />
               </LinearGradient>
             </Defs>
             <Path
@@ -435,11 +483,7 @@ export const MapBottomSheet = ({
       <InstructionText>{instruction}</InstructionText>
       {(hasDeviation || isRecalculating) && (
         <StatusPill>
-          <StatusPillText>
-            {isRecalculating
-              ? "경로를 재탐색하고 있어요"
-              : "경로에서 벗어났어요"}
-          </StatusPillText>
+          <StatusPillText>{isRecalculating ? "경로를 재탐색하고 있어요" : "경로에서 벗어났어요"}</StatusPillText>
         </StatusPill>
       )}
 
@@ -451,7 +495,11 @@ export const MapBottomSheet = ({
         >
           <ActionButtonText variant="secondary">위험 제보</ActionButtonText>
         </ActionButton>
-        <ActionButton variant="danger" onPress={onClose} activeOpacity={0.8}>
+        <ActionButton
+          variant="danger"
+          onPress={handleStopNavigation}
+          activeOpacity={0.8}
+        >
           <ActionButtonText variant="danger">안내 종료</ActionButtonText>
         </ActionButton>
       </ButtonRow>

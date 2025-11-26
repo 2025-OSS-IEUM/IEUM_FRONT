@@ -4,6 +4,7 @@ import { Platform, Dimensions, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { CustomText } from "../../components";
 import Svg, { Path, Circle, Line } from "react-native-svg";
+import { useTts } from "../../tts";
 
 interface Place {
   id: string;
@@ -177,6 +178,13 @@ export const PlaceDetailSheet = ({
   onStartNavigation,
   onSetDestination,
 }: PlaceDetailSheetProps) => {
+  const { speak } = useTts();
+
+  const handleStartNavigation = () => {
+    speak(`${place.place_name}으로 길 안내를 시작하겠습니다`);
+    onStartNavigation();
+  };
+
   return (
     <SheetContainer>
       <HeaderRow>
@@ -252,7 +260,7 @@ export const PlaceDetailSheet = ({
         <SecondaryButton onPress={onSetDestination}>
           <ButtonText>도착지로 설정</ButtonText>
         </SecondaryButton>
-        <ActionButton onPress={onStartNavigation}>
+        <ActionButton onPress={handleStartNavigation}>
           <PrimaryButtonGradient>
             <ButtonText primary>안내 시작</ButtonText>
             <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
