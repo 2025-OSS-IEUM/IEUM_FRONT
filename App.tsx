@@ -7,7 +7,7 @@ import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash } from "./src/pages";
+import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash, Login, SignUp } from "./src/pages";
 
 type TabType = "map" | "home" | "profile" | "report";
 
@@ -55,6 +55,9 @@ export default function App() {
   });
 
   const [showSplash, setShowSplash] = useState(true);
+  const [showLoginSplash, setShowLoginSplash] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [showReportDetails, setShowReportDetails] = useState(false);
   const [showReportDone, setShowReportDone] = useState(false);
@@ -156,6 +159,61 @@ export default function App() {
         <ThemeProvider theme={theme}>
           <Splash onFinish={() => setShowSplash(false)} />
           <StatusBar style="light" />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (showLoginSplash) {
+    return (
+      <SafeAreaProvider>
+        <ThemeProvider theme={theme}>
+          <Splash
+            onFinish={() => {
+              setShowLoginSplash(false);
+              setIsLoggedIn(true);
+            }}
+          />
+          <StatusBar style="light" />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    );
+  }
+
+  if (!isLoggedIn) {
+    if (showSignUp) {
+      return (
+        <SafeAreaProvider>
+          <ThemeProvider theme={theme}>
+            <SignUp
+              onNavigateBack={() => setShowSignUp(false)}
+              onSignUpSuccess={() => {
+                setShowSignUp(false);
+                setIsLoggedIn(true);
+              }}
+            />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      );
+    }
+
+    return (
+      <SafeAreaProvider>
+        <ThemeProvider theme={theme}>
+          <Login
+            onLoginSuccess={() => setShowLoginSplash(true)}
+            onNavigateToSignUp={() => setShowSignUp(true)}
+            onNavigateToFindId={() => {
+              // TODO: 아이디 찾기 페이지로 이동
+              console.log("Navigate to FindId");
+            }}
+            onNavigateToFindPassword={() => {
+              // TODO: 비밀번호 찾기 페이지로 이동
+              console.log("Navigate to FindPassword");
+            }}
+          />
+          <StatusBar style="auto" />
         </ThemeProvider>
       </SafeAreaProvider>
     );

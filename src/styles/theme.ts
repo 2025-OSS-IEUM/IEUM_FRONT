@@ -17,6 +17,7 @@ export const theme = {
       primary: "#4A4A4A",
       secondary: "#666666",
       white: "#FFFFFF",
+      link: "#999",
     },
     border: "#E0E0E0",
     error: "#FF4444",
