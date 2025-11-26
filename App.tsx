@@ -7,7 +7,7 @@ import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile, Report, ReportDetails, ReportDone } from "./src/pages";
+import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash } from "./src/pages";
 
 type TabType = "map" | "home" | "profile" | "report";
 
@@ -54,6 +54,7 @@ export default function App() {
     "Pinkfong-Baby-Shark-Bold": require("./assets/fonts/Pinkfong Baby Shark Font_ Bold.ttf"),
   });
 
+  const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [showReportDetails, setShowReportDetails] = useState(false);
   const [showReportDone, setShowReportDone] = useState(false);
@@ -146,6 +147,17 @@ export default function App() {
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>로딩 중...</Text>
       </View>
+    );
+  }
+
+  if (showSplash) {
+    return (
+      <SafeAreaProvider>
+        <ThemeProvider theme={theme}>
+          <Splash onFinish={() => setShowSplash(false)} />
+          <StatusBar style="light" />
+        </ThemeProvider>
+      </SafeAreaProvider>
     );
   }
 
