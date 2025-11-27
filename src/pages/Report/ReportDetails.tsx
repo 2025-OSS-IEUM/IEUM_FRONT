@@ -1,10 +1,14 @@
-import React, { useState } from "react";
-import { ScrollView, View, TouchableOpacity, Image } from "react-native";
+import React, { useState, useEffect } from "react";
+import { ScrollView, View, TouchableOpacity, Image, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styled from "styled-components/native";
 import Svg, { Path } from "react-native-svg";
 import { Container, CustomText } from "../../components";
 import { theme } from "../../styles/theme";
+import { usersService } from "../../api/users";
+import { reportsService } from "../../api/reports";
+import { storage } from "../../utils/storage";
+import { ReportResponse, ReportStatus as ApiReportStatus, ReportType } from "../../types/api";
 
 const ScrollContainer = styled.ScrollView`
   flex: 1;
@@ -253,6 +257,60 @@ interface ReportItemData {
   status: ReportStatus;
 }
 
+// API ReportStatus를 UI ReportStatus로 변환
+const mapApiStatusToUiStatus = (apiStatus: ApiReportStatus): ReportStatus => {
+  switch (apiStatus) {
+    case "approved":
+      return "approved";
+    case "pending_review":
+      return "pending";
+    case "resolved":
+      return "approved"; // resolved는 승인 완료로 표시
+    default:
+      return "pending";
+  }
+};
+
+// ReportType을 한글 제목으로 변환
+const getReportTypeTitle = (type: ReportType): string => {
+  const typeMap: Record<ReportType, string> = {
+    sidewalk_damage: "보도블록 파손",
+    construction: "공사 중",
+    missing_crosswalk: "횡단보도 없음",
+    no_tactile: "점자블록 없음",
+    etc: "기타",
+  };
+  return typeMap[type] || "기타";
+};
+
+// 날짜를 "YY-MM-DD" 형식으로 변환
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    const year = date.getFullYear().toString().slice(-2);
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  } catch (error) {
+    return dateString;
+  }
+};
+
+// API ReportResponse를 ReportItemData로 변환
+const convertReportResponseToItemData = (report: ReportResponse): ReportItemData => {
+  return {
+    id: report.id,
+    thumbnail:
+      report.photoUrls && report.photoUrls.length > 0
+        ? report.photoUrls[0]
+        : require("../../../assets/dummy/dummy1.png"),
+    title: getReportTypeTitle(report.type),
+    description: report.description,
+    date: formatDate(report.createdAt),
+    status: mapApiStatusToUiStatus(report.status),
+  };
+};
+
 interface ReportDetailsProps {
   onNavigateBack?: () => void;
   reports?: ReportItemData[];
@@ -262,58 +320,75 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>("report");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [userName, setUserName] = useState("");
+  const [reports, setReports] = useState<ReportItemData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: 실제 데이터는 API에서 가져올 예정
-  const mockReports: ReportItemData[] = [
-    {
-      id: "1",
-      thumbnail: require("../../../assets/dummy/dummy1.png"),
-      title: "보도블록 파손",
-      description: "한밭대학교 n4동 보도블럭이 이상해요",
-      date: "25-10-21",
-      status: "approved",
-    },
-    {
-      id: "2",
-      thumbnail: require("../../../assets/dummy/dummy2.png"),
-      title: "점자블록 파손",
-      description: "한밭대학교 정문 앞 점자블록 파손",
-      date: "25-09-13",
-      status: "pending",
-    },
-    {
-      id: "3",
-      thumbnail: require("../../../assets/dummy/dummy3.png"),
-      title: "킥보드 무단 주차",
-      description: "한밭대학교 정문 앞 킥보드 무단 주차",
-      date: "25-09-02",
-      status: "rejected",
-    },
-    {
-      id: "4",
-      thumbnail: require("../../../assets/dummy/dummy1.png"),
-      title: "계단 난간 파손",
-      description: "한밭대학교 도서관 앞 계단 난간이 위험해요",
-      date: "25-08-25",
-      status: "approved",
-    },
-    {
-      id: "5",
-      thumbnail: require("../../../assets/dummy/dummy2.png"),
-      title: "보행로 장애물",
-      description: "한밭대학교 학생회관 앞 보행로에 장애물이 있어요",
-      date: "25-08-15",
-      status: "pending",
-    },
-    {
-      id: "6",
-      thumbnail: require("../../../assets/dummy/dummy3.png"),
-      title: "가로등 불량",
-      description: "한밭대학교 운동장 옆 가로등이 고장났어요",
-      date: "25-08-05",
-      status: "rejected",
-    },
-  ];
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        // Try storage first
+        const storedUser = await storage.getUserInfo();
+        if (storedUser) {
+          setUserName(storedUser.name || storedUser.username);
+        }
+
+        const user = await usersService.getMyProfile();
+        console.log("API Response /users/me (ReportDetails):", JSON.stringify(user, null, 2));
+
+        const isMockData = user && user.username === "홍길동" && user.user_id === "example_user";
+
+        if (user && !isMockData) {
+          setUserName(user.name || user.username);
+        } else if (isMockData && storedUser) {
+          // Keep stored user
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile in ReportDetails:", error);
+      }
+    };
+    fetchUserProfile();
+  }, []);
+
+  useEffect(() => {
+    const fetchReports = async () => {
+      // propReports가 있으면 API 호출하지 않음
+      if (propReports && propReports.length > 0) {
+        setReports(propReports);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+        const apiReports = await reportsService.getMyReports();
+        console.log("API Response /users/me/reports:", JSON.stringify(apiReports, null, 2));
+
+        const convertedReports = apiReports.map(convertReportResponseToItemData);
+        setReports(convertedReports);
+      } catch (error: any) {
+        console.error("Failed to fetch reports:", error);
+
+        // 백엔드 기능이 아직 구현되지 않은 경우를 위한 안내 메시지
+        if (error.response?.status === 404 || error.response?.status === 500) {
+          setError(
+            "제보 내역 조회 기능이 아직 준비되지 않았습니다.\n" + "백엔드에 사용자별 제보 조회 API를 추가해야 합니다."
+          );
+        } else {
+          setError("제보 내역을 불러오는데 실패했습니다.");
+        }
+
+        // 에러 발생 시 빈 배열로 설정
+        setReports([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchReports();
+  }, [propReports]);
 
   const getStatusText = (status: ReportStatus): string => {
     switch (status) {
@@ -328,10 +403,7 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
     }
   };
 
-  // propReports가 있으면 사용하고, 없으면 mockReports 사용
-  const allReports = propReports && propReports.length > 0 ? propReports : mockReports;
-
-  const filteredReports = allReports.filter(report => {
+  const filteredReports = reports.filter(report => {
     if (activeFilter === "all") return true;
     return report.status === activeFilter;
   });
@@ -389,7 +461,7 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
             />
           </Svg>
         </ProfileImageContainer>
-        <ProfileName>홍길동</ProfileName>
+        <ProfileName>{userName}</ProfileName>
       </ProfileSection>
 
       <TabContainer>
@@ -438,33 +510,67 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
 
           <ScrollContainer>
             <ReportListContainer>
-              {filteredReports.map(report => (
-                <ReportItem key={report.id}>
-                  <ReportThumbnail
-                    source={typeof report.thumbnail === "string" ? { uri: report.thumbnail } : report.thumbnail}
+              {isLoading ? (
+                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                  <ActivityIndicator
+                    size="large"
+                    color={theme.colors.primary}
                   />
-                  <ReportContent>
-                    <View>
-                      <ReportHeader>
-                        <ReportTitle>{report.title}</ReportTitle>
-                        <ReportHeaderRight>
-                          <ReportDate>{report.date}</ReportDate>
-                          <StatusBadge status={report.status}>
-                            <StatusBadgeText>{getStatusText(report.status)}</StatusBadgeText>
-                          </StatusBadge>
-                        </ReportHeaderRight>
-                      </ReportHeader>
-                      <ReportDescriptionContainer>
-                        <ReportDescription>
-                          {report.description.length > 20
-                            ? `${report.description.substring(0, 20)}...`
-                            : report.description}
-                        </ReportDescription>
-                      </ReportDescriptionContainer>
-                    </View>
-                  </ReportContent>
-                </ReportItem>
-              ))}
+                  <CustomText
+                    color={theme.colors.text.secondary}
+                    size={theme.fontSize.md}
+                    style={{ marginTop: theme.spacing.md }}
+                  >
+                    제보 내역을 불러오는 중...
+                  </CustomText>
+                </View>
+              ) : error ? (
+                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                  <CustomText
+                    color={theme.colors.error}
+                    size={theme.fontSize.md}
+                  >
+                    {error}
+                  </CustomText>
+                </View>
+              ) : filteredReports.length === 0 ? (
+                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                  <CustomText
+                    color={theme.colors.text.secondary}
+                    size={theme.fontSize.md}
+                  >
+                    제보 내역이 없습니다.
+                  </CustomText>
+                </View>
+              ) : (
+                filteredReports.map(report => (
+                  <ReportItem key={report.id}>
+                    <ReportThumbnail
+                      source={typeof report.thumbnail === "string" ? { uri: report.thumbnail } : report.thumbnail}
+                    />
+                    <ReportContent>
+                      <View>
+                        <ReportHeader>
+                          <ReportTitle>{report.title}</ReportTitle>
+                          <ReportHeaderRight>
+                            <ReportDate>{report.date}</ReportDate>
+                            <StatusBadge status={report.status}>
+                              <StatusBadgeText>{getStatusText(report.status)}</StatusBadgeText>
+                            </StatusBadge>
+                          </ReportHeaderRight>
+                        </ReportHeader>
+                        <ReportDescriptionContainer>
+                          <ReportDescription>
+                            {report.description.length > 20
+                              ? `${report.description.substring(0, 20)}...`
+                              : report.description}
+                          </ReportDescription>
+                        </ReportDescriptionContainer>
+                      </View>
+                    </ReportContent>
+                  </ReportItem>
+                ))
+              )}
             </ReportListContainer>
           </ScrollContainer>
         </>

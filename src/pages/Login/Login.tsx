@@ -10,7 +10,7 @@ import { theme } from "../../styles/theme";
 
 const LoginContainer = styled.View`
   flex: 1;
-  background-color: ${(props) => props.theme.colors.background};
+  background-color: ${props => props.theme.colors.background};
 `;
 
 const ScrollContent = styled(ScrollView)`
@@ -23,8 +23,8 @@ const ContentWrapper = styled.View`
   align-items: center;
   padding-top: 60px;
   padding-bottom: 40px;
-  padding-left: ${(props) => props.theme.spacing.lg}px;
-  padding-right: ${(props) => props.theme.spacing.lg}px;
+  padding-left: ${props => props.theme.spacing.lg}px;
+  padding-right: ${props => props.theme.spacing.lg}px;
 `;
 
 const LogoContainer = styled.View`
@@ -35,9 +35,9 @@ const LogoContainer = styled.View`
 
 const LogoText = styled(CustomText)`
   margin-top: 20px;
-  font-size: ${(props) => props.theme.fontSize.xxl}px;
+  font-size: ${props => props.theme.fontSize.xxl}px;
   font-weight: bold;
-  color: ${(props) => props.theme.colors.primary};
+  color: ${props => props.theme.colors.primary};
 `;
 
 const FormContainer = styled.View`
@@ -46,27 +46,27 @@ const FormContainer = styled.View`
 `;
 
 const InputWrapper = styled.View`
-  margin-bottom: ${(props) => props.theme.spacing.lg}px;
+  margin-bottom: ${props => props.theme.spacing.lg}px;
 `;
 
 const ButtonWrapper = styled.View`
-  margin-top: ${(props) => props.theme.spacing.xl}px;
-  margin-bottom: ${(props) => props.theme.spacing.lg}px;
+  margin-top: ${props => props.theme.spacing.xl}px;
+  margin-bottom: ${props => props.theme.spacing.lg}px;
 `;
 
 const LinkContainer = styled.View`
   flex-direction: row;
   justify-content: center;
   align-items: center;
-  margin-top: ${(props) => props.theme.spacing.lg}px;
+  margin-top: ${props => props.theme.spacing.lg}px;
 `;
 
 const LinkDivider = styled.View`
   width: 1px;
   height: 14px;
-  background-color: ${(props) => props.theme.colors.text.link};
-  margin-left: ${(props) => props.theme.spacing.md}px;
-  margin-right: ${(props) => props.theme.spacing.md}px;
+  background-color: ${props => props.theme.colors.text.link};
+  margin-left: ${props => props.theme.spacing.md}px;
+  margin-right: ${props => props.theme.spacing.md}px;
 `;
 
 const LinkButton = styled.TouchableOpacity`
@@ -83,6 +83,12 @@ interface LoginProps {
   onLoginSuccess?: () => void;
 }
 
+import { authService } from "../../api/auth";
+import { storage } from "../../utils/storage";
+import { Alert } from "react-native";
+
+// ... inside Login component ...
+
 export const Login = ({
   onNavigateToSignUp,
   onNavigateToFindId,
@@ -93,10 +99,11 @@ export const Login = ({
   const [password, setPassword] = useState("");
   const [idError, setIdError] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const validateInputs = () => {
+  const handleLogin = async () => {
+    // Validate inputs explicitly
     let isValid = true;
-
     if (!id.trim()) {
       setIdError("아이디를 입력해주세요");
       isValid = false;
@@ -111,21 +118,82 @@ export const Login = ({
       setPasswordError("");
     }
 
-    return isValid;
-  };
+    if (isValid) {
+      try {
+        setIsLoading(true);
+        const response = await authService.login({
+          username: id,
+          password: password,
+        });
 
-  const handleLogin = () => {
-    if (validateInputs()) {
-      // TODO: API 호출
-      console.log("Login attempt:", { id, password });
-      if (onLoginSuccess) {
-        onLoginSuccess();
+        let userToSave = response.user;
+
+        // Check if API returned mock data (userId "example_user" and username "홍길동")
+        // If so, use the entered ID to create a temporary user object
+        // so the user sees their own information instead of hardcoded data.
+        if (response.user && response.user.userId === "example_user" && response.user.username === "홍길동") {
+          // Try to preserve existing user info (especially phone number) from storage
+          const existingUser = await storage.getUserInfo();
+
+          userToSave = {
+            ...response.user,
+            user_id: id,
+            username: id, // Use the entered ID as username
+            name: id,
+            // Preserve phone number from existing stored data if available
+            phone: existingUser?.phone || undefined,
+          } as any;
+        } else {
+          // Use the response from API as-is
+          userToSave = {
+            ...response.user,
+          };
+        }
+
+        await storage.setToken(response.accessToken);
+        await storage.setRefreshToken(response.refreshToken);
+        // Save user info for fallback
+        await storage.setUserInfo(userToSave);
+
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        }
+      } catch (error: any) {
+        // 서버 에러 메시지 확인
+        const errorDetail = error.response?.data?.detail;
+        let errorMessage = "로그인 중 오류가 발생했습니다.";
+
+        if (errorDetail) {
+          if (typeof errorDetail === "string") {
+            errorMessage = errorDetail;
+          } else if (Array.isArray(errorDetail)) {
+            errorMessage = errorDetail[0]?.msg || "입력 정보를 확인해주세요.";
+          }
+        }
+
+        // 500 에러인 경우 더 자세한 정보 로깅
+        if (error.response?.status === 500) {
+          console.error("[Login Error] 500 Server Error:", {
+            url: `${error.config?.baseURL}${error.config?.url}`,
+            method: error.config?.method,
+            requestData: { username: id, password: "***" },
+            responseData: error.response?.data,
+          });
+          errorMessage = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.\n\n" + errorMessage;
+        }
+
+        Alert.alert("로그인 실패", errorMessage);
+      } finally {
+        setIsLoading(false);
       }
     }
   };
 
   return (
-    <Container padding={0} backgroundColor={theme.colors.background}>
+    <Container
+      padding={0}
+      backgroundColor={theme.colors.background}
+    >
       <LoginContainer>
         <ScrollContent
           contentContainerStyle={{ flexGrow: 1 }}
@@ -133,7 +201,12 @@ export const Login = ({
         >
           <ContentWrapper>
             <LogoContainer>
-              <Svg width="117" height="130" viewBox="0 0 117 130" fill="none">
+              <Svg
+                width="117"
+                height="130"
+                viewBox="0 0 117 130"
+                fill="none"
+              >
                 <Circle
                   cx="18.4899"
                   cy="57.1198"
@@ -174,9 +247,22 @@ export const Login = ({
                   d="M18.1385 128.871V100H37.519V104.945H24.1202V111.963H36.5221V116.908H24.1202V123.926H37.5589V128.871H18.1385Z"
                   fill="#68D0C6"
                 />
-                <Path d="M5.98162 100V128.871H0V100H5.98162Z" fill="#68D0C6" />
-                <Circle cx="10" cy="53" r="3" fill="white" />
-                <Circle cx="76" cy="10" r="3" fill="white" />
+                <Path
+                  d="M5.98162 100V128.871H0V100H5.98162Z"
+                  fill="#68D0C6"
+                />
+                <Circle
+                  cx="10"
+                  cy="53"
+                  r="3"
+                  fill="white"
+                />
+                <Circle
+                  cx="76"
+                  cy="10"
+                  r="3"
+                  fill="white"
+                />
               </Svg>
             </LogoContainer>
 
@@ -187,7 +273,7 @@ export const Login = ({
                   labelColor="rgba(25, 28, 50, 0.69)"
                   placeholder="아이디를 입력해주세요"
                   value={id}
-                  onChangeText={(text) => {
+                  onChangeText={text => {
                     setId(text);
                     if (idError) setIdError("");
                   }}
@@ -203,7 +289,7 @@ export const Login = ({
                   labelColor="rgba(25, 28, 50, 0.69)"
                   placeholder="비밀번호를 입력해주세요"
                   value={password}
-                  onChangeText={(text) => {
+                  onChangeText={text => {
                     setPassword(text);
                     if (passwordError) setPasswordError("");
                   }}
@@ -226,7 +312,12 @@ export const Login = ({
                     : { elevation: 4 }
                 }
               >
-                <DefaultButton onPress={handleLogin} fullWidth>
+                <DefaultButton
+                  onPress={handleLogin}
+                  fullWidth
+                  loading={isLoading}
+                  disabled={isLoading}
+                >
                   로그인
                 </DefaultButton>
               </ButtonWrapper>

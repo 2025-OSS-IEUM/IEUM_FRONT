@@ -7,6 +7,7 @@ import { useAssets } from "expo-asset";
 import { Container, CustomText, DefaultButton, InputField } from "../../components";
 import { VoiceSettings } from "./VoiceSettings";
 import { useScreenReader } from "../../tts";
+import { usersService } from "../../api/users";
 
 const ProfileScroll = styled.ScrollView`
   flex: 1;
@@ -463,12 +464,6 @@ const ModalInputContainer = styled.View`
   margin-bottom: 20px;
 `;
 
-const statsData = [
-  { value: "4", label: "즐겨찾기" },
-  { value: "15", label: "제보 내역" },
-  { value: "3", label: "획득한 칭찬" },
-];
-
 const reportLinks = ["제보하기", "제보 내역", "신고하기"];
 const settingLinks = ["즐겨찾기", "음성 설정", "계정", "로그아웃"];
 
@@ -477,15 +472,117 @@ interface ProfileProps {
   onNavigateToReportDetails?: () => void;
 }
 
+import { storage } from "../../utils/storage";
+
 export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: ProfileProps) => {
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
-  const [userName, setUserName] = useState("홍길동");
-  const [userEmail, setUserEmail] = useState("hong12@naver.com");
-  const [editName, setEditName] = useState("홍길동");
-  const [editEmail, setEditEmail] = useState("hong12@naver.com");
+
+  // User Data State
+  const [userName, setUserName] = useState("");
+  const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+  const [userPhone, setUserPhone] = useState("");
+
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+
+  // Stats State
+  const [stats, setStats] = useState([
+    { value: "0", label: "즐겨찾기" },
+    { value: "0", label: "제보 내역" },
+    { value: "0", label: "획득한 칭찬" },
+  ]);
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      try {
+        // First try getting user from storage as immediate display
+        const storedUser = await storage.getUserInfo();
+        if (storedUser) {
+          console.log("Loaded user from storage:", storedUser);
+          console.log("Phone in storage:", storedUser.phone);
+          setUserName(storedUser.name || storedUser.username);
+          setUserId(storedUser.username);
+
+          // Ensure email is set from stored user, or fallback to user_id if it looks like an email
+          const emailToUse =
+            storedUser.email || (storedUser.user_id && storedUser.user_id.includes("@") ? storedUser.user_id : "");
+          setUserEmail(emailToUse);
+          setEditEmail(emailToUse);
+
+          // Ensure phone is set from stored user (only if it exists)
+          if (storedUser.phone) {
+            console.log("Setting phone from storage:", storedUser.phone);
+            setUserPhone(storedUser.phone);
+          } else {
+            console.log("No phone found in storage");
+          }
+
+          setEditName(storedUser.name || storedUser.username);
+        }
+
+        const user = await usersService.getMyProfile();
+
+        // Check if API returned mock data "홍길동"
+        const isMockData = user && user.username === "홍길동" && user.user_id === "example_user";
+
+        if (isMockData && storedUser) {
+          // API가 mock 데이터를 반환한 경우, storage의 실제 사용자 정보를 사용
+          console.log("API returned mock data, using stored real user data instead");
+          console.log("Using real user data from storage:", JSON.stringify(storedUser, null, 2));
+
+          // Storage의 실제 정보로 모든 상태 업데이트
+          setUserName(storedUser.name || storedUser.username);
+          setUserId(storedUser.username);
+
+          const emailToUse = storedUser.email || "";
+          setUserEmail(emailToUse);
+          setEditEmail(emailToUse);
+
+          const phoneToUse = storedUser.phone || "등록된 번호 없음";
+          setUserPhone(phoneToUse);
+
+          setEditName(storedUser.name || storedUser.username);
+        } else if (user && !isMockData) {
+          // API가 실제 데이터를 반환한 경우
+          console.log("API Response /users/me:", JSON.stringify(user, null, 2));
+
+          setUserName(user.name || user.username);
+          setUserId(user.username);
+          // Use API email, or fallback to stored email, or user_id if it looks like email
+          const emailToUse =
+            user.email || storedUser?.email || (user.user_id && user.user_id.includes("@") ? user.user_id : "");
+          setUserEmail(emailToUse);
+          setEditEmail(emailToUse);
+
+          // Use API phone, or fallback to stored phone
+          const phoneToUse = user.phone || storedUser?.phone || "등록된 번호 없음";
+          setUserPhone(phoneToUse);
+
+          setEditName(user.name || user.username);
+
+          if (user.reportCount !== undefined) {
+            setStats(prev =>
+              prev.map(item => (item.label === "제보 내역" ? { ...item, value: String(user.reportCount) } : item))
+            );
+          }
+        } else if (isMockData && !storedUser) {
+          // No stored user and API returned mock data - set default phone message
+          console.log("API returned mock data and no stored user found");
+          if (!userPhone) {
+            setUserPhone("등록된 번호 없음");
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      }
+    };
+    fetchUserProfile();
+  }, []);
+
   const [assets] = useAssets([require("../../../assets/mypage/ieum.svg")]);
   const dogUri = assets?.[0]?.localUri ?? assets?.[0]?.uri;
 
@@ -748,7 +845,7 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
                   size={16}
                   color="#797979"
                 >
-                  honghong12
+                  {userId}
                 </InfoValue>
               </InfoRow>
               <InfoDivider />
@@ -789,7 +886,7 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
                   size={16}
                   color="#797979"
                 >
-                  010-1234-5678
+                  {userPhone}
                 </InfoValue>
               </InfoRow>
             </InfoCard>
@@ -939,7 +1036,7 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
                 end={{ x: 1, y: 0 }}
               >
                 <StatsList>
-                  {statsData.map((item, index) => (
+                  {stats.map((item, index) => (
                     <React.Fragment key={item.label}>
                       <StatItem>
                         <StatValue
@@ -956,7 +1053,7 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
                           {item.label}
                         </StatLabel>
                       </StatItem>
-                      {index < statsData.length - 1 && <StatDivider />}
+                      {index < stats.length - 1 && <StatDivider />}
                     </React.Fragment>
                   ))}
                 </StatsList>

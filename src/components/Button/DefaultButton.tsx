@@ -1,9 +1,5 @@
 import React from "react";
-import {
-  TouchableOpacity,
-  TouchableOpacityProps,
-  Platform,
-} from "react-native";
+import { TouchableOpacity, TouchableOpacityProps, Platform, ActivityIndicator } from "react-native";
 import styled from "styled-components/native";
 import { CustomText } from "../Text";
 import { theme } from "../../styles/theme";
@@ -11,14 +7,14 @@ import { theme } from "../../styles/theme";
 interface DefaultButtonProps extends TouchableOpacityProps {
   children: React.ReactNode;
   fullWidth?: boolean;
+  loading?: boolean;
 }
 
 const StyledButton = styled.TouchableOpacity<{ fullWidth?: boolean }>`
-  ${(props) => (props.fullWidth ? "flex: 1;" : "")}
-  padding: ${(props) => props.theme.spacing.md + 4}px ${(props) =>
-    props.theme.spacing.lg}px;
-  background-color: ${(props) => props.theme.colors.primary};
-  border-radius: ${(props) => props.theme.borderRadius.lg}px;
+  ${props => (props.fullWidth ? "flex: 1;" : "")}
+  padding: ${props => props.theme.spacing.md + 4}px ${props => props.theme.spacing.lg}px;
+  background-color: ${props => props.theme.colors.primary};
+  border-radius: ${props => props.theme.borderRadius.lg}px;
   align-items: center;
   justify-content: center;
 `;
@@ -27,12 +23,15 @@ export const DefaultButton = ({
   children,
   fullWidth = false,
   activeOpacity = 0.8,
+  loading = false,
+  disabled,
   ...props
 }: DefaultButtonProps) => {
   return (
     <StyledButton
       fullWidth={fullWidth}
       activeOpacity={activeOpacity}
+      disabled={disabled || loading}
       style={
         Platform.OS === "ios"
           ? {
@@ -45,14 +44,18 @@ export const DefaultButton = ({
       }
       {...props}
     >
-      <CustomText
-        color="#FFFFFF"
-        size={theme.fontSize.md}
-        weight="bold"
-        style={{ color: "#FFFFFF" }}
-      >
-        {children}
-      </CustomText>
+      {loading ? (
+        <ActivityIndicator color="#FFFFFF" />
+      ) : (
+        <CustomText
+          color="#FFFFFF"
+          size={theme.fontSize.md}
+          weight="bold"
+          style={{ color: "#FFFFFF" }}
+        >
+          {children}
+        </CustomText>
+      )}
     </StyledButton>
   );
 };

@@ -7,6 +7,8 @@ import { useAssets } from "expo-asset";
 import { Container } from "../../components";
 import { CustomText } from "../../components/Text";
 import { useScreenReader } from "../../tts";
+import { usersService } from "../../api/users";
+import { UserInDB } from "../../types/api";
 
 const HomeContainer = styled.View`
   flex: 1;
@@ -199,6 +201,26 @@ interface HomeProps {
 export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProps) => {
   // 경험치 상태 (0-100 범위)
   const [experience, setExperience] = useState(0);
+  const [daysConnected, setDaysConnected] = useState(1);
+
+  // 사용자 정보 가져오기
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const user = await usersService.getMyProfile();
+        if (user && user.createdAt) {
+          const startDate = new Date(user.createdAt);
+          const today = new Date();
+          const diffTime = today.getTime() - startDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          setDaysConnected(diffDays + 1);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user profile:", error);
+      }
+    };
+    fetchUser();
+  }, []);
 
   // 구름 애니메이션
   const cloud1Anim = useRef(new Animated.Value(0)).current;
@@ -236,23 +258,9 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
     ).start();
   }, []);
 
-  // 가입일
-  const registrationDate = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() - 1); // 하루 전
-    return date;
-  })[0];
-
-  // 연결된 일수 계산
-  const getDaysConnected = () => {
-    const today = new Date();
-    const diffTime = today.getTime() - registrationDate.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1; // 최소 1일
-  };
+  // 가입일 - API에서 가져온 값 사용
 
   // TTS로 읽을 텍스트 생성
-  const daysConnected = getDaysConnected();
   const homeScreenText = `이음이 홈 화면입니다. 이어진지 ${daysConnected}일 됐어요.`;
 
   // 화면 로드 시 한 번만 읽기
@@ -313,7 +321,7 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
                     <ProgressBarContainer>
                       <ProgressBarFill progress={experience} />
                     </ProgressBarContainer>
-                    <DaysText>이어진지 {getDaysConnected()}일 됐어요!</DaysText>
+                    <DaysText>이어진지 {daysConnected}일 됐어요!</DaysText>
                   </MiddleSection>
                   {mailUri && (
                     <MailIconWrapper>

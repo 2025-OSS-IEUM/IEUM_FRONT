@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components/native";
 import { Platform } from "react-native";
 import { MapIcon, HomeIcon, ProfileIcon } from "./FooterIcons";
@@ -47,6 +47,10 @@ const TabText = styled.Text<{ isActive: boolean }>`
 
 export const Footer = ({ initialTab = "home", onTabChange }: FooterProps) => {
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   const handleTabPress = (tab: TabType) => {
     setActiveTab(tab);

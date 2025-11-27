@@ -102,7 +102,7 @@ const ThankYouMessage = styled.Text`
 const InfoCard = styled.View`
   width: 100%;
   max-width: 362px;
-  min-height: 264px;
+  min-height: 200px;
   flex-shrink: 0;
   border-radius: 15px;
   background: ${props => props.theme.colors.white};
@@ -115,13 +115,12 @@ const InfoCard = styled.View`
   elevation: 2;
 `;
 
-const InfoTitle = styled.Text`
-  font-size: 20px;
-  font-weight: 600;
-  color: #4a4a4a;
-  font-family: ${props => props.theme.fonts.semiBold};
-  text-align: left;
-  margin-bottom: ${props => props.theme.spacing.lg}px;
+const InfoTitle = styled(CustomText)`
+  font-size: ${props => props.theme.fontSize.lg}px;
+  font-weight: bold;
+  color: ${props => props.theme.colors.text.primary};
+  font-family: ${props => props.theme.fonts.bold};
+  margin-bottom: ${props => props.theme.spacing.md}px;
 `;
 
 const InfoRow = styled.View`
@@ -131,76 +130,85 @@ const InfoRow = styled.View`
   margin-bottom: ${props => props.theme.spacing.md}px;
 `;
 
-const InfoLabel = styled.Text`
-  font-size: 15px;
-  font-weight: 600;
-  color: #a2a2a2;
-  font-family: ${props => props.theme.fonts.semiBold};
-  flex: 1;
+const InfoLabel = styled(CustomText)`
+  font-size: ${props => props.theme.fontSize.md}px;
+  color: ${props => props.theme.colors.text.secondary};
+  font-family: ${props => props.theme.fonts.medium};
+  min-width: 80px;
 `;
 
-const InfoValue = styled.Text`
-  font-size: 15px;
-  font-weight: 400;
-  color: #797979;
+const InfoValue = styled(CustomText)`
+  font-size: ${props => props.theme.fontSize.md}px;
+  color: ${props => props.theme.colors.text.primary};
   font-family: ${props => props.theme.fonts.primary};
-  flex: 2;
+  flex: 1;
   text-align: right;
 `;
 
 const Divider = styled.View`
-  width: 328.024px;
   height: 1px;
-  background: #dadada;
+  background-color: ${props => props.theme.colors.border};
   margin-top: ${props => props.theme.spacing.md}px;
   margin-bottom: ${props => props.theme.spacing.md}px;
 `;
 
-const DescriptionRow = styled.View``;
+const DescriptionRow = styled.View`
+  margin-top: ${props => props.theme.spacing.md}px;
+`;
 
-const DescriptionLabel = styled.Text`
-  font-size: 15px;
-  font-weight: 600;
-  color: #a2a2a2;
-  font-family: ${props => props.theme.fonts.semiBold};
+const DescriptionLabel = styled(CustomText)`
+  font-size: ${props => props.theme.fontSize.md}px;
+  color: ${props => props.theme.colors.text.secondary};
+  font-family: ${props => props.theme.fonts.medium};
   margin-bottom: ${props => props.theme.spacing.sm}px;
 `;
 
-const DescriptionValue = styled.Text`
-  font-size: 15px;
-  font-weight: 400;
-  color: #30b0c7;
+const DescriptionValue = styled(CustomText)`
+  font-size: ${props => props.theme.fontSize.md}px;
+  color: ${props => props.theme.colors.text.primary};
   font-family: ${props => props.theme.fonts.primary};
+  line-height: 24px;
 `;
 
 const ButtonContainer = styled.View`
   width: 100%;
-  padding-left: ${props => props.theme.spacing.md}px;
-  padding-right: ${props => props.theme.spacing.md}px;
+  max-width: 362px;
+  margin-top: ${props => props.theme.spacing.md}px;
 `;
 
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  address: string;
-}
-
 interface ReportDoneProps {
-  reportData?: {
-    location: LocationData;
+  reportData: {
+    location: {
+      latitude: number;
+      longitude: number;
+      address: string;
+    };
     dangerType: string;
     description: string;
     images: string[];
-  };
-  onNavigateToHome?: () => void;
-  onNavigateBack?: () => void;
+  } | null;
+  onNavigateToHome: () => void;
+  onNavigateBack: () => void;
 }
 
 export const ReportDone = ({ reportData, onNavigateToHome, onNavigateBack }: ReportDoneProps) => {
   const insets = useSafeAreaInsets();
 
+  // Helper to get readable danger type label
+  const getDangerTypeLabel = (type: string | undefined) => {
+    const types: Record<string, string> = {
+      sidewalk_damage: "보도블록 파손",
+      construction: "공사 중",
+      missing_crosswalk: "횡단보도 없음",
+      no_tactile: "점자블록 없음",
+      etc: "기타",
+    };
+    return type ? types[type] || type : "위험 유형 없음";
+  };
+
   return (
     <Container>
+      {/* ... Header ... */}
       <Header style={{ paddingTop: insets.top + theme.spacing.md }}>
         <BackButton
           onPress={onNavigateBack}
@@ -212,6 +220,7 @@ export const ReportDone = ({ reportData, onNavigateToHome, onNavigateBack }: Rep
           <HeaderTitle>제보 완료</HeaderTitle>
         </HeaderTitleContainer>
       </Header>
+
       <ScrollContainer>
         <ContentContainer>
           <IconContainer>
@@ -235,11 +244,16 @@ export const ReportDone = ({ reportData, onNavigateToHome, onNavigateBack }: Rep
             <InfoTitle>제보 정보</InfoTitle>
             <InfoRow>
               <InfoLabel>위치</InfoLabel>
-              <InfoValue>{reportData?.location?.address || "위치 정보 없음"}</InfoValue>
+              <InfoValue
+                numberOfLines={2}
+                ellipsizeMode="tail"
+              >
+                {reportData?.location?.address || "위치 정보 없음"}
+              </InfoValue>
             </InfoRow>
             <InfoRow>
               <InfoLabel>위험 유형</InfoLabel>
-              <InfoValue>{reportData?.dangerType || "위험 유형 없음"}</InfoValue>
+              <InfoValue>{getDangerTypeLabel(reportData?.dangerType)}</InfoValue>
             </InfoRow>
             <Divider />
             <DescriptionRow>
