@@ -9,6 +9,7 @@ import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle, Path } from "react-native-svg";
 import { Container, CustomText } from "../../components";
+import { routesService } from "../../api/routes";
 import { MapBottomSheet } from "./MapBottomSheet";
 import { MapSearch } from "./MapSearch";
 import { PlaceDetailSheet } from "./PlaceDetailSheet";
@@ -273,6 +274,8 @@ interface RouteData {
 // ... existing code ...
 
 const ROUTE_DEVIATION_THRESHOLD = 30;
+const TURN_ANGLE_THRESHOLD = 15; // 최소 회전 각도 (도)
+const MIN_TURN_DISTANCE = 20; // 최소 회전 간격 (미터)
 
 const getInstructionFromGuide = (guide: Guide, distance: number) => {
   const roundedDist = Math.round(distance / 10) * 10;
@@ -290,6 +293,122 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const d = R * c;
   return Math.round(d * 1000);
+};
+
+/**
+ * 두 좌표 간의 방향(bearing)을 계산합니다 (0-360도)
+ */
+const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const lat1Rad = (lat1 * Math.PI) / 180;
+  const lat2Rad = (lat2 * Math.PI) / 180;
+
+  const y = Math.sin(dLon) * Math.cos(lat2Rad);
+  const x = Math.cos(lat1Rad) * Math.sin(lat2Rad) - Math.sin(lat1Rad) * Math.cos(lat2Rad) * Math.cos(dLon);
+
+  let bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  bearing = (bearing + 360) % 360;
+  return bearing;
+};
+
+/**
+ * 방향 변화를 분석해서 회전 유형을 판단합니다
+ */
+const detectTurnType = (prevBearing: number, nextBearing: number): { type: number; guidance: string } => {
+  let angleDiff = nextBearing - prevBearing;
+
+  // 각도 차이를 -180 ~ 180 범위로 정규화
+  if (angleDiff > 180) {
+    angleDiff -= 360;
+  } else if (angleDiff < -180) {
+    angleDiff += 360;
+  }
+
+  const absAngle = Math.abs(angleDiff);
+
+  // 직진 (각도 변화가 작음)
+  if (absAngle < TURN_ANGLE_THRESHOLD) {
+    return { type: 1, guidance: "직진" };
+  }
+
+  // 좌회전
+  if (angleDiff > 0) {
+    if (absAngle < 45) {
+      return { type: 6, guidance: "약간 좌회전" };
+    } else if (absAngle < 135) {
+      return { type: 7, guidance: "좌회전" };
+    } else {
+      return { type: 8, guidance: "왼쪽으로 유턴" };
+    }
+  }
+  // 우회전
+  else {
+    if (absAngle < 45) {
+      return { type: 3, guidance: "약간 우회전" };
+    } else if (absAngle < 135) {
+      return { type: 4, guidance: "우회전" };
+    } else {
+      return { type: 5, guidance: "오른쪽으로 유턴" };
+    }
+  }
+};
+
+/**
+ * 경로 좌표 배열을 분석해서 방향 전환점(Guide)을 생성합니다
+ */
+const generateGuidesFromPath = (path: Coordinate[]): Guide[] => {
+  if (path.length < 3) {
+    return [];
+  }
+
+  const guides: Guide[] = [];
+  let accumulatedDistance = 0;
+
+  for (let i = 1; i < path.length - 1; i++) {
+    const prev = path[i - 1];
+    const current = path[i];
+    const next = path[i + 1];
+
+    // 이전 구간의 방향
+    const prevBearing = calculateBearing(prev.latitude, prev.longitude, current.latitude, current.longitude);
+    // 다음 구간의 방향
+    const nextBearing = calculateBearing(current.latitude, current.longitude, next.latitude, next.longitude);
+
+    // 방향 변화 계산
+    let angleDiff = nextBearing - prevBearing;
+    if (angleDiff > 180) {
+      angleDiff -= 360;
+    } else if (angleDiff < -180) {
+      angleDiff += 360;
+    }
+
+    const absAngle = Math.abs(angleDiff);
+
+    // 회전이 감지되면 가이드 생성
+    if (absAngle >= TURN_ANGLE_THRESHOLD) {
+      const segmentDistance = calculateDistance(prev.latitude, prev.longitude, current.latitude, current.longitude);
+
+      // 최소 거리 이상 떨어진 경우만 가이드 추가
+      if (segmentDistance >= MIN_TURN_DISTANCE || guides.length === 0) {
+        const turnInfo = detectTurnType(prevBearing, nextBearing);
+        guides.push({
+          x: current.longitude,
+          y: current.latitude,
+          distance: accumulatedDistance + segmentDistance,
+          type: turnInfo.type,
+          guidance: turnInfo.guidance,
+          road_index: i,
+        });
+        accumulatedDistance = 0;
+      } else {
+        accumulatedDistance += segmentDistance;
+      }
+    } else {
+      accumulatedDistance += calculateDistance(prev.latitude, prev.longitude, current.latitude, current.longitude);
+    }
+  }
+
+  return guides;
 };
 
 const generateKakaoMapTemplate = (apiKey: string) => `
@@ -748,100 +867,42 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const getWalkingRoute = useCallback(
     async (origin: Coordinate, destination: Coordinate): Promise<RouteData | null> => {
-      if (!KAKAO_REST_API_KEY) {
-        console.warn("카카오 REST API 키가 설정되지 않았습니다.");
-        return null;
-      }
-
       try {
-        const url = "https://apis-navi.kakaomobility.com/v1/directions";
-        // 카카오 모빌리티 API는 "경도,위도" 형식을 사용합니다
-        const originStr = `${origin.longitude},${origin.latitude}`;
-        const destinationStr = `${destination.longitude},${destination.latitude}`;
-
-        console.log("경로 조회 요청:", {
-          origin: originStr,
-          destination: destinationStr,
+        const response = await routesService.getRouteCandidates({
+          start_lat: origin.latitude,
+          start_lon: origin.longitude,
+          end_lat: destination.latitude,
+          end_lon: destination.longitude,
         });
 
-        const headers = {
-          Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
-          "Content-Type": "application/json",
-        };
+        if (response.routes && response.routes.length > 0) {
+          // 일단 첫 번째 경로를 사용
+          const route = response.routes[0];
 
-        const queryParams = new URLSearchParams({
-          origin: originStr,
-          destination: destinationStr,
-        });
+          // 경로 좌표 변환
+          const linePath: Coordinate[] = route.path.map(p => ({
+            latitude: p.lat,
+            longitude: p.lon,
+          }));
 
-        const requestUrl = `${url}?${queryParams}`;
-        console.log("요청 URL:", requestUrl);
+          // 경로 좌표 배열을 분석해서 방향 전환점(Guide) 생성
+          const guides = generateGuidesFromPath(linePath);
 
-        const response = await fetch(requestUrl, {
-          method: "GET",
-          headers: headers,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          let errorMessage = errorText;
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMessage = errorJson.message || errorJson.msg || errorText;
-          } catch {
-            // JSON 파싱 실패 시 원본 텍스트 사용
-          }
-          console.error("API 에러 응답:", {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorMessage,
-          });
-          throw new Error(`HTTP error! Status: ${response.status}, Message: ${errorMessage}`);
+          return { path: linePath, guides };
         }
 
-        const data = await response.json();
+        return null;
+      } catch (error: any) {
+        // 에러를 더 자세히 로깅하되, 사용자에게는 친화적인 메시지만 표시
+        const errorMessage = error?.message || "경로 조회에 실패했습니다";
+        console.error("❌ [Map.getWalkingRoute] 경로 조회 실패:", {
+          message: errorMessage,
+          status: error?.status,
+          originalError: error?.originalError,
+        });
 
-        // 경로 좌표 및 가이드 추출
-        const linePath: Coordinate[] = [];
-        const guides: Guide[] = [];
-
-        if (data.routes && data.routes[0] && data.routes[0].sections && data.routes[0].sections[0]) {
-          const section = data.routes[0].sections[0];
-
-          if (section.roads) {
-            section.roads.forEach((router: any) => {
-              if (router.vertexes && Array.isArray(router.vertexes)) {
-                router.vertexes.forEach((vertex: number, index: number) => {
-                  // vertexes 배열은 [lng, lat, lng, lat, ...] 형식
-                  if (index % 2 === 0) {
-                    const lng = router.vertexes[index];
-                    const lat = router.vertexes[index + 1];
-                    if (lat !== undefined && lng !== undefined) {
-                      linePath.push({ latitude: lat, longitude: lng });
-                    }
-                  }
-                });
-              }
-            });
-          }
-
-          if (section.guides) {
-            section.guides.forEach((guide: any) => {
-              guides.push({
-                x: guide.x,
-                y: guide.y,
-                distance: guide.distance,
-                type: guide.type,
-                guidance: guide.guidance,
-                road_index: guide.road_index,
-              });
-            });
-          }
-        }
-
-        return { path: linePath, guides };
-      } catch (error) {
-        console.error("경로 조회 실패:", error);
+        // 에러가 발생해도 기본 경로(직선)를 사용할 수 있도록 null 반환
+        // TTS로 에러 메시지를 읽지 않도록 주의
         return null;
       }
     },
@@ -902,29 +963,45 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const buildRouteBetween = useCallback(
     async (origin: Coordinate, place: Place) => {
-      const destinationCoord = getCoordinateFromPlace(place);
-      const routeData = await getWalkingRoute(origin, destinationCoord);
+      try {
+        const destinationCoord = getCoordinateFromPlace(place);
+        const routeData = await getWalkingRoute(origin, destinationCoord);
 
-      const path = routeData?.path || [origin, destinationCoord];
-      const guides = routeData?.guides || [];
+        const path = routeData?.path || [origin, destinationCoord];
+        const guides = routeData?.guides || [];
 
-      setRoutePath(path);
-      setRouteGuides(guides);
+        setRoutePath(path);
+        setRouteGuides(guides);
 
-      if (guides.length > 0) {
-        // 첫 번째 가이드 설정
-        const firstGuide = guides[0];
-        const dist = calculateDistance(origin.latitude, origin.longitude, firstGuide.y, firstGuide.x);
-        setCurrentInstruction(getInstructionFromGuide(firstGuide, dist));
-      } else {
+        if (guides.length > 0) {
+          // 첫 번째 가이드 설정
+          const firstGuide = guides[0];
+          const dist = calculateDistance(origin.latitude, origin.longitude, firstGuide.y, firstGuide.x);
+          setCurrentInstruction(getInstructionFromGuide(firstGuide, dist));
+        } else {
+          // 경로 조회 실패 시에도 기본 안내 메시지 설정 (에러 메시지가 TTS로 읽히지 않도록)
+          setCurrentInstruction("목적지까지 직진입니다");
+        }
+
+        setDistance(
+          calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
+        );
+        sendRouteToWebView(place, path);
+        return path;
+      } catch (error: any) {
+        // 예상치 못한 에러 발생 시에도 안전한 기본 메시지 설정
+        console.error("❌ [Map.buildRouteBetween] 예상치 못한 에러:", error);
+        const destinationCoord = getCoordinateFromPlace(place);
+        const fallbackPath = [origin, destinationCoord];
+        setRoutePath(fallbackPath);
+        setRouteGuides([]);
         setCurrentInstruction("목적지까지 직진입니다");
+        setDistance(
+          calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
+        );
+        sendRouteToWebView(place, fallbackPath);
+        return fallbackPath;
       }
-
-      setDistance(
-        calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
-      );
-      sendRouteToWebView(place, path);
-      return path;
     },
     [calculateDistance, getCoordinateFromPlace, getWalkingRoute, sendRouteToWebView]
   );
@@ -959,32 +1036,80 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const updateNavigationInstruction = useCallback(
     (coord: Coordinate) => {
-      if (routeGuides.length === 0) return;
+      if (routeGuides.length === 0 || routePath.length === 0) {
+        // 가이드가 없으면 목적지까지 직진 안내
+        if (destination) {
+          const destCoord = getCoordinateFromPlace(destination);
+          const remainingDist = calculateDistance(
+            coord.latitude,
+            coord.longitude,
+            destCoord.latitude,
+            destCoord.longitude
+          );
+          if (remainingDist > 0) {
+            setCurrentInstruction(`${remainingDist}m 앞까지 직진입니다`);
+          }
+        }
+        return;
+      }
 
-      // 현재 위치에서 가장 가까운 다음 가이드 찾기
+      // 경로 상에서 현재 위치에 가장 가까운 점 찾기
+      let closestPathIndex = 0;
+      let minPathDistance = Infinity;
+
+      for (let i = 0; i < routePath.length; i++) {
+        const pathPoint = routePath[i];
+        const dist = calculateDistance(coord.latitude, coord.longitude, pathPoint.latitude, pathPoint.longitude);
+        if (dist < minPathDistance) {
+          minPathDistance = dist;
+          closestPathIndex = i;
+        }
+      }
+
+      // 경로 상의 현재 위치 이후에 있는 가이드 찾기
       let nextGuide: Guide | null = null;
       let minDistance = Infinity;
 
       for (const guide of routeGuides) {
-        const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
-
-        // 이미 지나간 가이드인지 판단 (단순 거리만으로는 부족할 수 있으나,
-        // 순차적으로 체크하거나 bearing 등을 고려해야 함. 여기서는 단순화하여 가장 가까운 것을 찾음)
-        // 실제로는 경로 상의 위치 인덱스를 추적하는 것이 정확함.
-
-        if (dist < minDistance) {
-          minDistance = dist;
-          nextGuide = guide;
+        // 가이드의 road_index가 현재 경로 위치보다 앞에 있으면 다음 가이드
+        if (guide.road_index > closestPathIndex) {
+          const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
+          if (dist < minDistance) {
+            minDistance = dist;
+            nextGuide = guide;
+          }
         }
       }
 
-      // 가장 가까운 가이드가 있고, 거리가 너무 멀지 않으면(예: 1km 이내) 해당 가이드를 안내
-      // 만약 아주 가까우면(예: 20m 이내) 그 다음 가이드를 찾아야 할 수도 있음
-      if (nextGuide) {
+      // 다음 가이드를 찾지 못했지만 가이드가 있으면, 가장 가까운 가이드 사용
+      if (!nextGuide && routeGuides.length > 0) {
+        for (const guide of routeGuides) {
+          const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
+          if (dist < minDistance) {
+            minDistance = dist;
+            nextGuide = guide;
+          }
+        }
+      }
+
+      // 가이드가 있으면 안내, 없으면 목적지까지 직진
+      if (nextGuide && minDistance < 1000) {
+        // 1km 이내의 가이드만 안내
         setCurrentInstruction(getInstructionFromGuide(nextGuide, minDistance));
+      } else if (destination) {
+        const destCoord = getCoordinateFromPlace(destination);
+        const remainingDist = calculateDistance(
+          coord.latitude,
+          coord.longitude,
+          destCoord.latitude,
+          destCoord.longitude
+        );
+        if (remainingDist > 0) {
+          setCurrentInstruction(`${remainingDist}m 앞까지 직진입니다`);
+        }
       }
     },
-    [routeGuides]
+    [routeGuides, routePath, destination, getCoordinateFromPlace]
   );
 
   const rerouteIfNecessary = useCallback(

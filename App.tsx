@@ -60,6 +60,7 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("home");
+  const [previousTab, setPreviousTab] = useState<TabType | null>(null);
   const [showReportDetails, setShowReportDetails] = useState(false);
   const [showReportDone, setShowReportDone] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
@@ -98,46 +99,97 @@ export default function App() {
 
     switch (activeTab) {
       case "map":
-        return <Map onNavigateToReport={() => setActiveTab("report")} />;
+        return (
+          <Map
+            onNavigateToReport={() => {
+              setPreviousTab("map");
+              setActiveTab("report");
+            }}
+          />
+        );
       case "home":
         return (
           <Home
             onNavigateToReportDetails={() => setShowReportDetails(true)}
-            onNavigateToReport={() => setActiveTab("report")}
+            onNavigateToReport={() => {
+              setPreviousTab("home");
+              setActiveTab("report");
+            }}
           />
         );
       case "profile":
         return (
           <Profile
-            onNavigateToReport={() => setActiveTab("report")}
+            onNavigateToReport={() => {
+              setPreviousTab("profile");
+              setActiveTab("report");
+            }}
             onNavigateToReportDetails={() => setShowReportDetails(true)}
           />
         );
       case "report":
         return (
           <Report
-            onNavigateToHome={() => setActiveTab("home")}
+            onNavigateToHome={() => {
+              if (previousTab) {
+                setActiveTab(previousTab);
+              } else {
+                setActiveTab("home");
+              }
+            }}
             onReportSubmit={data => {
-              setReportData(data);
-              setShowReportDone(true);
+              // 제보 완료 후 처리
+              // API 응답은 ReportResponse 타입: { type, description, location: { type: "Point", coordinates: [lng, lat] }, photoUrls, ... }
+              try {
+                // GeoJSON 형식의 location을 변환: coordinates는 [longitude, latitude]
+                const coordinates = data.location?.coordinates || [0, 0];
+                const longitude = coordinates[0] || 0;
+                const latitude = coordinates[1] || 0;
 
-              // 제보 내역에 추가
-              const now = new Date();
-              const dateStr = `${String(now.getFullYear()).slice(-2)}-${String(now.getMonth() + 1).padStart(
-                2,
-                "0"
-              )}-${String(now.getDate()).padStart(2, "0")}`;
+                const reportDataToSave: ReportData = {
+                  location: {
+                    latitude: latitude,
+                    longitude: longitude,
+                    address: `위도: ${latitude.toFixed(6)}, 경도: ${longitude.toFixed(6)}`, // 주소는 나중에 역지오코딩으로 가져올 수 있음
+                  },
+                  dangerType: data.type || "",
+                  description: data.description || "",
+                  images: data.photoUrls || [],
+                };
 
-              const newReport: ReportItemData = {
-                id: Date.now().toString(),
-                thumbnail: data.images[0] || require("./assets/dummy/dummy1.png"),
-                title: data.dangerType,
-                description: data.description,
-                date: dateStr,
-                status: "pending",
-              };
+                setReportData(reportDataToSave);
+                setShowReportDone(true);
 
-              setReports(prev => [newReport, ...prev]);
+                // 제보 내역에 추가
+                const now = new Date();
+                const dateStr = `${String(now.getFullYear()).slice(-2)}-${String(now.getMonth() + 1).padStart(
+                  2,
+                  "0"
+                )}-${String(now.getDate()).padStart(2, "0")}`;
+
+                const reportTypeLabels: Record<string, string> = {
+                  sidewalk_damage: "보도블록 파손",
+                  construction: "공사 중",
+                  missing_crosswalk: "횡단보도 없음",
+                  no_tactile: "점자블록 없음",
+                  etc: "기타",
+                };
+
+                const newReport: ReportItemData = {
+                  id: data.id || Date.now().toString(),
+                  thumbnail:
+                    (reportDataToSave.images && reportDataToSave.images.length > 0 && reportDataToSave.images[0]) ||
+                    require("./assets/dummy/dummy1.png"),
+                  title: reportTypeLabels[data.type] || data.type || "",
+                  description: reportDataToSave.description,
+                  date: dateStr,
+                  status: data.status === "approved" ? "approved" : data.status === "resolved" ? "approved" : "pending",
+                };
+
+                setReports(prev => [newReport, ...prev]);
+              } catch (error) {
+                console.error("❌ [App.onReportSubmit] 제보 데이터 처리 중 오류:", error);
+              }
             }}
           />
         );
@@ -145,7 +197,10 @@ export default function App() {
         return (
           <Home
             onNavigateToReportDetails={() => setShowReportDetails(true)}
-            onNavigateToReport={() => setActiveTab("report")}
+            onNavigateToReport={() => {
+              setPreviousTab("home");
+              setActiveTab("report");
+            }}
           />
         );
     }
@@ -191,13 +246,15 @@ export default function App() {
       return (
         <SafeAreaProvider>
           <ThemeProvider theme={theme}>
-            <SignUp
-              onNavigateBack={() => setShowSignUp(false)}
-              onSignUpSuccess={() => {
-                setShowSignUp(false);
-                setIsLoggedIn(true);
-              }}
-            />
+            <TtsProvider>
+              <SignUp
+                onNavigateBack={() => setShowSignUp(false)}
+                onSignUpSuccess={() => {
+                  setShowSignUp(false);
+                  setShowLoginSplash(true);
+                }}
+              />
+            </TtsProvider>
             <StatusBar style="auto" />
           </ThemeProvider>
         </SafeAreaProvider>
