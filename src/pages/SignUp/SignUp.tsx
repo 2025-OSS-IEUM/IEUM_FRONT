@@ -333,21 +333,23 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
       try {
         setIsLoading(true);
 
-        // 요청 데이터를 명시적으로 정리하여 서버에 전송 (OpenAPI 스펙 준수)
+        // 요청 데이터를 명시적으로 정리하여 서버에 전송
         // SignupRequest 스펙:
         // - username: string (4-20자) - required
         // - email: string (email format) - required
         // - password: string (최소 8자) - required
         // - passwordConfirm: string - required
         // - name: string (1-50자) OR null - required (null 허용)
+        // - phone: string - required (실제 서버가 요구함)
         // - disabilityType: DisabilityType enum - required
         // - consent: ConsentCreate { terms: boolean, privacy: boolean } - required
+        // name이 빈 문자열이면 null로 전송 (OpenAPI 스펙: 1-50자 또는 null)
         const signupData: {
           username: string;
           email: string;
           password: string;
           passwordConfirm: string;
-          name: string;
+          name: string | null;
           phone: string;
           disabilityType: DisabilityType;
           consent: {
@@ -359,7 +361,7 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
           email: accountInfo.email.trim().toLowerCase(),
           password: accountInfo.password,
           passwordConfirm: accountInfo.confirmPassword,
-          name: trimmedName, // Step 2에서 검증되었으므로 항상 값이 있음
+          name: trimmedName || null, // 빈 문자열이면 null로 전송
           phone: personalInfo.phone.replace(/[^\d]/g, ""), // 하이픈 제거하고 숫자만 전송
           disabilityType: disabilityType,
           consent: {
@@ -367,6 +369,9 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
             privacy: Boolean(terms.privacyPolicy),
           },
         };
+
+        // 디버깅: 요청 데이터 로깅
+        console.log("[SignUp] 회원가입 요청 데이터:", JSON.stringify(signupData, null, 2));
 
         // 데이터 검증
         if (!signupData.username || signupData.username.length < 4 || signupData.username.length > 20) {
@@ -384,6 +389,9 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
         if (!signupData.consent.terms || !signupData.consent.privacy) {
           throw new Error("필수 약관에 동의해주세요.");
         }
+
+        // 회원가입 전에 이전 인증 정보 삭제 (다른 계정으로 가입하는 경우 대비)
+        await storage.clearAuth();
 
         const signupResponse = await authService.signup(signupData);
 
@@ -427,23 +435,65 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
         };
         await storage.setUserInfo(userInfoToSave);
 
-        // 시각 장애인 경우 TTS 자동 활성화
-        if (disabilityType === "blind" || disabilityType === "low_vision") {
-          await updateSettings({ enabled: true });
-        } else {
-          await updateSettings({ enabled: false });
-        }
+        // 회원가입 후 자동 로그인 (이전 토큰은 이미 clearAuth()로 삭제됨)
+        try {
+          const loginResponse = await authService.login({
+            username: signupData.username,
+            password: signupData.password,
+          });
 
-        Alert.alert("회원가입 성공", "회원가입이 완료되었습니다.", [{ text: "확인", onPress: onSignUpSuccess }]);
+          // 로그인 성공 시에만 토큰 저장 (이전 토큰은 이미 삭제됨)
+          await storage.setToken(loginResponse.accessToken);
+          await storage.setRefreshToken(loginResponse.refreshToken);
+
+          // 사용자 정보 업데이트 (로그인 응답의 사용자 정보 사용)
+          const userToSave = {
+            ...loginResponse.user,
+            phone: personalInfo.phone, // 회원가입 시 입력한 전화번호 유지
+          };
+          await storage.setUserInfo(userToSave);
+
+          // 시각 장애인 경우 TTS 자동 활성화
+          if (disabilityType === "blind" || disabilityType === "low_vision") {
+            await updateSettings({ enabled: true });
+          } else {
+            await updateSettings({ enabled: false });
+          }
+
+          console.log("[SignUp] 회원가입 및 자동 로그인 성공:", signupData.username);
+          Alert.alert("회원가입 성공", "회원가입이 완료되었습니다.", [{ text: "확인", onPress: onSignUpSuccess }]);
+        } catch (loginError: any) {
+          // 자동 로그인 실패 시: 토큰은 이미 clearAuth()로 삭제되어 있음
+          console.error("[SignUp] 자동 로그인 실패:", loginError);
+          // 추가로 한 번 더 삭제 (안전장치)
+          await storage.clearAuth();
+          Alert.alert("회원가입 성공", "회원가입이 완료되었습니다.\n로그인 화면에서 로그인해주세요.", [
+            { text: "확인", onPress: onSignUpSuccess },
+          ]);
+        }
       } catch (error: any) {
+        // 디버깅: 에러 상세 정보 로깅
+        console.error("[SignUp] 회원가입 에러:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          message: error.message,
+        });
+
         let errorMessage = "오류가 발생했습니다.";
         if (error.response?.data) {
           if (typeof error.response.data === "string") {
             errorMessage = error.response.data;
           } else if (error.response.data.detail) {
             if (Array.isArray(error.response.data.detail)) {
-              errorMessage =
-                error.response.data.detail[0]?.msg || error.response.data.detail[0]?.message || errorMessage;
+              // 각 에러의 loc와 msg를 조합하여 더 자세한 메시지 생성
+              const errorDetails = error.response.data.detail
+                .map((err: any) => {
+                  const field = Array.isArray(err.loc) ? err.loc.slice(1).join(".") : "unknown";
+                  return `${field}: ${err.msg}`;
+                })
+                .join("\n");
+              errorMessage = errorDetails || error.response.data.detail[0]?.msg || errorMessage;
             } else {
               errorMessage = error.response.data.detail;
             }
@@ -452,6 +502,11 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
           }
         } else if (error.message) {
           errorMessage = error.message;
+        }
+
+        // 422 에러인 경우 더 자세한 메시지 표시
+        if (error.response?.status === 422) {
+          errorMessage = "입력 정보를 확인해주세요.\n\n" + errorMessage;
         }
 
         // 500 에러인 경우 더 자세한 메시지 표시

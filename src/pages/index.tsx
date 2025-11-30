@@ -7,3 +7,5 @@ export { ReportDone } from "./Report";
 export { Splash } from "./Splash";
 export { Login } from "./Login";
 export { SignUp } from "./SignUp";
+export { FindID } from "./Find";
+export { FindPassword } from "./Find";
