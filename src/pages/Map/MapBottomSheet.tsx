@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { Platform, Animated, TouchableOpacity, PanResponder, Alert } from "react-native";
 import styled from "styled-components/native";
 import Svg, { Path, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
+import * as Haptics from "expo-haptics";
 import { useTts } from "../../tts";
 import { theme } from "../../styles/theme";
 
@@ -362,6 +363,124 @@ export const MapBottomSheet = ({
       { cancelable: true }
     );
   };
+
+  // 방향 정확도에 따른 햅틱 피드백 (지속적으로 진동)
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    const hapticInterval = setInterval(() => {
+      // heading이나 bearingToDestination이 없으면 햅틱 없음
+      if (heading === null || bearingToDestination === null) {
+        if (__DEV__) {
+          console.log("[MapBottomSheet] Haptic skipped - missing heading or bearing:", {
+            heading,
+            bearingToDestination,
+          });
+        }
+        return;
+      }
+
+      if (arrowRotation === undefined || arrowRotation === null) {
+        if (__DEV__) {
+          console.log("[MapBottomSheet] Haptic skipped - arrowRotation is null/undefined");
+        }
+        return;
+      }
+
+      // 각도 차이를 0~180도 범위로 정규화
+      const angleDiff = Math.abs(arrowRotation);
+      const normalizedAngle = angleDiff > 180 ? 360 - angleDiff : angleDiff;
+
+      // 각도 차이에 따라 햅틱 강도 결정
+      // 0도에 가까울수록 강한 햅틱, 180도에 가까울수록 약한 햅틱
+      // 정확한 방향일 때는 notificationAsync의 Error 타입 사용 (가장 강한 진동)
+      // 벗어난 방향일 때는 impactAsync 사용
+
+      if (normalizedAngle <= 10) {
+        // 완전히 정확한 방향 (0~10도) - 가장 강한 진동 (Error 타입)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
+          .then(() => {
+            if (__DEV__) {
+              console.log("[MapBottomSheet] Haptic triggered (Error - strongest):", {
+                arrowRotation: arrowRotation.toFixed(1),
+                normalizedAngle: normalizedAngle.toFixed(1),
+                heading: heading?.toFixed(1),
+                bearingToDestination: bearingToDestination?.toFixed(1),
+              });
+            }
+          })
+          .catch(error => {
+            console.error("[MapBottomSheet] Haptic error:", error);
+          });
+      } else if (normalizedAngle <= 30) {
+        // 매우 정확한 방향 (10~30도) - 강한 진동 (Warning 타입)
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+          .then(() => {
+            if (__DEV__) {
+              console.log("[MapBottomSheet] Haptic triggered (Warning - strong):", {
+                arrowRotation: arrowRotation.toFixed(1),
+                normalizedAngle: normalizedAngle.toFixed(1),
+                heading: heading?.toFixed(1),
+                bearingToDestination: bearingToDestination?.toFixed(1),
+              });
+            }
+          })
+          .catch(error => {
+            console.error("[MapBottomSheet] Haptic error:", error);
+          });
+      } else if (normalizedAngle <= 60) {
+        // 중간 방향 (30~60도) - 중간 진동 (Heavy)
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
+          .then(() => {
+            if (__DEV__) {
+              console.log("[MapBottomSheet] Haptic triggered (Heavy):", {
+                arrowRotation: arrowRotation.toFixed(1),
+                normalizedAngle: normalizedAngle.toFixed(1),
+                heading: heading?.toFixed(1),
+                bearingToDestination: bearingToDestination?.toFixed(1),
+              });
+            }
+          })
+          .catch(error => {
+            console.error("[MapBottomSheet] Haptic error:", error);
+          });
+      } else if (normalizedAngle <= 90) {
+        // 약간 벗어난 방향 (60~90도) - 약한 진동 (Medium)
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+          .then(() => {
+            if (__DEV__) {
+              console.log("[MapBottomSheet] Haptic triggered (Medium):", {
+                arrowRotation: arrowRotation.toFixed(1),
+                normalizedAngle: normalizedAngle.toFixed(1),
+                heading: heading?.toFixed(1),
+                bearingToDestination: bearingToDestination?.toFixed(1),
+              });
+            }
+          })
+          .catch(error => {
+            console.error("[MapBottomSheet] Haptic error:", error);
+          });
+      } else {
+        // 반대 방향 (90~180도) - 매우 약한 진동 (Light)
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+          .then(() => {
+            if (__DEV__) {
+              console.log("[MapBottomSheet] Haptic triggered (Light):", {
+                arrowRotation: arrowRotation.toFixed(1),
+                normalizedAngle: normalizedAngle.toFixed(1),
+                heading: heading?.toFixed(1),
+                bearingToDestination: bearingToDestination?.toFixed(1),
+              });
+            }
+          })
+          .catch(error => {
+            console.error("[MapBottomSheet] Haptic error:", error);
+          });
+      }
+    }, 100); // 0.1초마다 체크 (완전히 연속적으로 진동이 느껴지도록)
+
+    return () => clearInterval(hapticInterval);
+  }, [isPlaying, arrowRotation, heading, bearingToDestination]);
 
   // 주기적으로 목적지 방향 안내 (15초 간격)
   useEffect(() => {

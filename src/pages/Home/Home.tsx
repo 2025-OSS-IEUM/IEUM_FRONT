@@ -203,20 +203,60 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
   const [experience, setExperience] = useState(0);
   const [daysConnected, setDaysConnected] = useState(1);
 
+  // 날짜 차이 계산 함수
+  const calculateDaysConnected = (createdAt: string): number => {
+    try {
+      const startDate = new Date(createdAt);
+      const today = new Date();
+      
+      // 시간 부분을 제거하고 날짜만 비교 (시간대 고려)
+      const startDateOnly = new Date(
+        startDate.getFullYear(),
+        startDate.getMonth(),
+        startDate.getDate()
+      );
+      const todayOnly = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate()
+      );
+      
+      // 날짜 차이 계산 (밀리초 단위)
+      const diffTime = todayOnly.getTime() - startDateOnly.getTime();
+      // 일 단위로 변환
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      // 최소 1일부터 시작 (가입일 당일도 1일로 계산)
+      const days = Math.max(1, diffDays + 1);
+      
+      console.log("[Home] 날짜 계산:", {
+        createdAt,
+        startDate: startDateOnly.toISOString(),
+        today: todayOnly.toISOString(),
+        diffDays,
+        calculatedDays: days,
+      });
+      
+      return days;
+    } catch (error) {
+      console.error("[Home] 날짜 계산 오류:", error);
+      return 1;
+    }
+  };
+
   // 사용자 정보 가져오기
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const user = await usersService.getMyProfile();
         if (user && user.createdAt) {
-          const startDate = new Date(user.createdAt);
-          const today = new Date();
-          const diffTime = today.getTime() - startDate.getTime();
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-          setDaysConnected(diffDays + 1);
+          const days = calculateDaysConnected(user.createdAt);
+          setDaysConnected(days);
+        } else {
+          console.warn("[Home] 사용자 정보 또는 createdAt이 없습니다:", user);
         }
       } catch (error) {
-        console.error("Failed to fetch user profile:", error);
+        console.error("[Home] 사용자 프로필 가져오기 실패:", error);
       }
     };
     fetchUser();
