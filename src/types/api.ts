@@ -1,11 +1,4 @@
-export type DisabilityType = 
-  | "none"
-  | "blind"
-  | "low_vision"
-  | "hearing"
-  | "mobility"
-  | "cognitive"
-  | "other";
+export type DisabilityType = "none" | "blind" | "low_vision" | "hearing" | "mobility" | "cognitive" | "other";
 
 export interface CheckAvailabilityResponse {
   available: boolean;
@@ -71,12 +64,7 @@ export interface PasswordResetResponse {
   expiresIn: number;
 }
 
-export type ReportType = 
-  | "sidewalk_damage"
-  | "construction"
-  | "missing_crosswalk"
-  | "no_tactile"
-  | "etc";
+export type ReportType = "sidewalk_damage" | "construction" | "missing_crosswalk" | "no_tactile" | "etc";
 
 export type SeverityLevel = "low" | "medium" | "high";
 export type ReportStatus = "pending_review" | "approved" | "resolved";
@@ -177,4 +165,3 @@ export interface UsernameLookupRequest {
 export interface UsernameLookupResponse {
   username: string;
 }
-

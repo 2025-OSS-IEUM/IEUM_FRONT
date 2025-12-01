@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { ThemeProvider } from "styled-components/native";
@@ -7,8 +7,9 @@ import { theme } from "./src/styles";
 import styled from "styled-components/native";
 import { View, Text } from "react-native";
 import { Footer } from "./src/components";
-import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash, Login, SignUp } from "./src/pages";
+import { Home, Map, Profile, Report, ReportDetails, ReportDone, Splash, Login, SignUp, FindID, FindPassword } from "./src/pages";
 import { TtsProvider } from "./src/tts";
+import { storage } from "./src/utils/storage";
 
 type TabType = "map" | "home" | "profile" | "report";
 
@@ -59,12 +60,93 @@ export default function App() {
   const [showLoginSplash, setShowLoginSplash] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [showFindID, setShowFindID] = useState(false);
+  const [showFindPassword, setShowFindPassword] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const [previousTab, setPreviousTab] = useState<TabType | null>(null);
   const [showReportDetails, setShowReportDetails] = useState(false);
   const [showReportDone, setShowReportDone] = useState(false);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [reports, setReports] = useState<ReportItemData[]>([]);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // 앱 시작 시 저장된 토큰 확인 및 서버 검증
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = await storage.getToken();
+        if (token) {
+          // 토큰이 있으면 서버에 검증 요청
+          try {
+            const { usersService } = await import("./src/api/users");
+            // /users/me 엔드포인트로 토큰 유효성 검증
+            const profile = await usersService.getMyProfile();
+            console.log("[App] 토큰 검증 성공, 사용자:", profile?.username || profile?.user_id);
+            // 검증 성공 시 로그인 상태로 설정
+            setIsLoggedIn(true);
+          } catch (error: any) {
+            // 네트워크 오류 감지: 서버가 꺼져있거나 연결할 수 없는 경우
+            const hasResponse = !!error.response;
+            const hasRequest = !!error.request;
+            const errorCode = error.code;
+            const status = error.response?.status;
+            const message = error.message || '';
+            
+            // 네트워크 오류 판단: response가 없고 request가 있거나, 특정 에러 코드가 있는 경우
+            const isNetworkError = !hasResponse && (
+              hasRequest || 
+              errorCode === 'ECONNABORTED' || 
+              errorCode === 'ENOTFOUND' || 
+              errorCode === 'ECONNREFUSED' ||
+              errorCode === 'ETIMEDOUT' ||
+              message.includes('Network Error') ||
+              message.includes('timeout') ||
+              message.includes('ECONNREFUSED')
+            );
+            
+            console.warn("[App] 토큰 검증 실패:", {
+              hasResponse,
+              hasRequest,
+              status: status || "NO_RESPONSE",
+              errorCode: errorCode || "NO_CODE",
+              message: message,
+              isNetworkError,
+            });
+            
+            // 서버가 꺼져있거나 연결할 수 없는 경우 (네트워크 오류)
+            // 또는 인증 실패 (401, 403)인 경우 토큰 삭제
+            if (isNetworkError) {
+              console.warn("[App] ❌ 서버 연결 불가 - 자동 로그아웃 처리");
+              await storage.clearAuth();
+              setIsLoggedIn(false);
+            } else if (status === 401 || status === 403) {
+              console.warn("[App] ❌ 인증 실패 (401/403) - 자동 로그아웃 처리");
+              await storage.clearAuth();
+              setIsLoggedIn(false);
+            } else {
+              // 기타 서버 오류 (500 등)의 경우에도 안전을 위해 토큰 삭제
+              console.warn("[App] ❌ 서버 오류 - 자동 로그아웃 처리");
+              await storage.clearAuth();
+              setIsLoggedIn(false);
+            }
+          }
+        } else {
+          // 토큰이 없으면 로그아웃 상태
+          console.log("[App] 저장된 토큰 없음, 로그아웃 상태");
+          setIsLoggedIn(false);
+        }
+      } catch (error) {
+        console.error("[App] 인증 확인 중 오류:", error);
+        // 에러 발생 시에도 토큰 삭제하고 로그아웃
+        await storage.clearAuth();
+        setIsLoggedIn(false);
+      } finally {
+        setIsCheckingAuth(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const handleTabChange = (tab: TabType) => {
     setActiveTab(tab);
@@ -91,7 +173,6 @@ export default function App() {
     if (showReportDetails) {
       return (
         <ReportDetails
-          reports={reports}
           onNavigateBack={() => setShowReportDetails(false)}
         />
       );
@@ -125,6 +206,10 @@ export default function App() {
               setActiveTab("report");
             }}
             onNavigateToReportDetails={() => setShowReportDetails(true)}
+            onLogout={async () => {
+              await storage.clearAuth();
+              setIsLoggedIn(false);
+            }}
           />
         );
       case "report":
@@ -206,7 +291,7 @@ export default function App() {
     }
   };
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || isCheckingAuth) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>로딩 중...</Text>
@@ -242,6 +327,32 @@ export default function App() {
   }
 
   if (!isLoggedIn) {
+    if (showFindPassword) {
+      return (
+        <SafeAreaProvider>
+          <ThemeProvider theme={theme}>
+            <FindPassword
+              onNavigateBack={() => setShowFindPassword(false)}
+            />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      );
+    }
+
+    if (showFindID) {
+      return (
+        <SafeAreaProvider>
+          <ThemeProvider theme={theme}>
+            <FindID
+              onNavigateBack={() => setShowFindID(false)}
+            />
+            <StatusBar style="auto" />
+          </ThemeProvider>
+        </SafeAreaProvider>
+      );
+    }
+
     if (showSignUp) {
       return (
         <SafeAreaProvider>
@@ -249,9 +360,18 @@ export default function App() {
             <TtsProvider>
               <SignUp
                 onNavigateBack={() => setShowSignUp(false)}
-                onSignUpSuccess={() => {
+                onSignUpSuccess={async () => {
                   setShowSignUp(false);
-                  setShowLoginSplash(true);
+                  // 회원가입 후 토큰이 저장되었는지 확인
+                  const token = await storage.getToken();
+                  if (token) {
+                    // 토큰이 있으면 바로 로그인 상태로 설정
+                    setIsLoggedIn(true);
+                    setShowLoginSplash(true);
+                  } else {
+                    // 토큰이 없으면 로그인 화면으로
+                    setIsLoggedIn(false);
+                  }
                 }}
               />
             </TtsProvider>
@@ -267,14 +387,8 @@ export default function App() {
           <Login
             onLoginSuccess={() => setShowLoginSplash(true)}
             onNavigateToSignUp={() => setShowSignUp(true)}
-            onNavigateToFindId={() => {
-              // TODO: 아이디 찾기 페이지로 이동
-              console.log("Navigate to FindId");
-            }}
-            onNavigateToFindPassword={() => {
-              // TODO: 비밀번호 찾기 페이지로 이동
-              console.log("Navigate to FindPassword");
-            }}
+            onNavigateToFindId={() => setShowFindID(true)}
+            onNavigateToFindPassword={() => setShowFindPassword(true)}
           />
           <StatusBar style="auto" />
         </ThemeProvider>

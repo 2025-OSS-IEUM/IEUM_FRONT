@@ -313,10 +313,9 @@ const convertReportResponseToItemData = (report: ReportResponse): ReportItemData
 
 interface ReportDetailsProps {
   onNavigateBack?: () => void;
-  reports?: ReportItemData[];
 }
 
-export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDetailsProps) => {
+export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>("report");
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
@@ -353,16 +352,10 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
 
   useEffect(() => {
     const fetchReports = async () => {
-      // propReports가 있으면 API 호출하지 않음
-      if (propReports && propReports.length > 0) {
-        setReports(propReports);
-        setIsLoading(false);
-        return;
-      }
-
       try {
         setIsLoading(true);
         setError(null);
+        // 항상 API를 호출하여 현재 사용자의 제보만 가져옴
         const apiReports = await reportsService.getMyReports();
         console.log("API Response /users/me/reports:", JSON.stringify(apiReports, null, 2));
 
@@ -388,7 +381,7 @@ export const ReportDetails = ({ onNavigateBack, reports: propReports }: ReportDe
     };
 
     fetchReports();
-  }, [propReports]);
+  }, []);
 
   const getStatusText = (status: ReportStatus): string => {
     switch (status) {

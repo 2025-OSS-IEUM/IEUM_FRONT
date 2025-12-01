@@ -46,14 +46,22 @@ apiClient.interceptors.response.use(
   response => {
     return response;
   },
-  error => {
+  async error => {
     // 에러 처리 - 상세한 로그
     if (error.response) {
       const status = error.response.status;
       const url = `${error.config?.baseURL}${error.config?.url}`;
       const method = error.config?.method?.toUpperCase() || "UNKNOWN";
 
-      if (status >= 500) {
+      // 401 에러 처리: 인증 실패 (토큰이 없거나 만료됨)
+      if (status === 401) {
+        console.warn(`[API Error] 401 Unauthorized: ${method} ${url}`);
+        console.warn(`[API Error] 인증 토큰이 만료되었거나 유효하지 않습니다.`);
+        
+        // 토큰 삭제 (재로그인 필요)
+        await storage.clearAuth();
+        console.warn(`[API Error] 인증 정보를 삭제했습니다. 다시 로그인해주세요.`);
+      } else if (status >= 500) {
         console.error(`[API Error] ${status} ${method} ${url}`);
         console.error(`[API Error] Response Data:`, error.response.data);
         console.error(`[API Error] Request Data:`, error.config?.data);

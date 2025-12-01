@@ -434,6 +434,22 @@ const SaveButtonText = styled(CustomText)`
   color: #ffffff;
 `;
 
+const LogoutButton = styled(TouchableOpacity)`
+  flex: 1;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  border-radius: 12px;
+  background-color: #ff6b6b;
+  align-items: center;
+  justify-content: center;
+`;
+
+const LogoutButtonText = styled(CustomText)`
+  font-size: 16px;
+  font-weight: 600;
+  color: #ffffff;
+`;
+
 const ModalOverlay = styled.View`
   flex: 1;
   background-color: rgba(0, 0, 0, 0.5);
@@ -470,15 +486,17 @@ const settingLinks = ["즐겨찾기", "음성 설정", "계정", "로그아웃"]
 interface ProfileProps {
   onNavigateToReport?: () => void;
   onNavigateToReportDetails?: () => void;
+  onLogout?: () => void;
 }
 
 import { storage } from "../../utils/storage";
 
-export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: ProfileProps) => {
+export const Profile = ({ onNavigateToReport, onNavigateToReportDetails, onLogout }: ProfileProps) => {
   const [showMyInfo, setShowMyInfo] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // User Data State
   const [userName, setUserName] = useState("");
@@ -736,6 +754,19 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
   const handleCancelName = () => {
     setEditName(userName);
     setShowNameModal(false);
+  };
+
+  const handleLogout = () => {
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutModal(false);
+    onLogout?.();
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   const profileRotate = profileRotation.interpolate({
@@ -1125,6 +1156,8 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
                     onPress={() => {
                       if (label === "음성 설정") {
                         setShowVoiceSettings(true);
+                      } else if (label === "로그아웃") {
+                        handleLogout();
                       }
                     }}
                   >
@@ -1145,6 +1178,70 @@ export const Profile = ({ onNavigateToReport, onNavigateToReportDetails }: Profi
           </Section>
         </ContentWrapper>
       </ProfileScroll>
+
+      <Modal
+        visible={showLogoutModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={cancelLogout}
+      >
+        <ModalOverlay>
+          <TouchableOpacity
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            activeOpacity={1}
+            onPress={cancelLogout}
+          />
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={e => e.stopPropagation()}
+          >
+            <ModalContent
+              style={
+                Platform.OS === "ios"
+                  ? {
+                      shadowColor: "rgba(0, 0, 0, 0.2)",
+                      shadowOffset: { width: 0, height: 4 },
+                      shadowOpacity: 1,
+                      shadowRadius: 12,
+                    }
+                  : { elevation: 8 }
+              }
+            >
+              <ModalTitle>로그아웃</ModalTitle>
+              <ModalInputContainer>
+                <CustomText
+                  size={16}
+                  color="#797979"
+                  style={{ textAlign: "center" }}
+                >
+                  정말 로그아웃 하시겠어요?
+                </CustomText>
+              </ModalInputContainer>
+
+              <ModalButtonContainer>
+                <CancelButton
+                  onPress={cancelLogout}
+                  activeOpacity={0.7}
+                >
+                  <CancelButtonText>취소</CancelButtonText>
+                </CancelButton>
+                <LogoutButton
+                  onPress={confirmLogout}
+                  activeOpacity={0.8}
+                >
+                  <LogoutButtonText>로그아웃</LogoutButtonText>
+                </LogoutButton>
+              </ModalButtonContainer>
+            </ModalContent>
+          </TouchableOpacity>
+        </ModalOverlay>
+      </Modal>
     </Container>
   );
 };
