@@ -196,7 +196,7 @@ const DEFAULT_SPEED = 1.0;
 const DEFAULT_PITCH = 1.0;
 const DEFAULT_VOLUME = 1.0;
 
-export const VoiceSettings: React.FC<VoiceSettingsProps> = ({ onNavigateBack }) => {
+export const VoiceSettings = ({ onNavigateBack }: VoiceSettingsProps) => {
   const { settings, updateSettings, speak, stop, readScreenText } = useTts();
 
   const [tempSpeed, setTempSpeed] = useState(settings.speed ?? DEFAULT_SPEED);

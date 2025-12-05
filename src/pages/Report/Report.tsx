@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { ScrollView, View, TextInput, TouchableOpacity, Image, Alert, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import styled from "styled-components/native";
 import Svg, { Path } from "react-native-svg";
+import { WebView, WebViewMessageEvent } from "react-native-webview";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { Container, CustomText } from "../../components";
@@ -11,6 +12,8 @@ import { DefaultButton } from "../../components/Button";
 import { theme } from "../../styles/theme";
 import { reportsService } from "../../api/reports";
 import { ReportType, ReportCreate } from "../../types/api";
+
+const KAKAO_JAVASCRIPT_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY;
 
 const ScrollContainer = styled.ScrollView`
   flex: 1;
@@ -71,8 +74,6 @@ const MapContainer = styled.View`
   border: 1px solid ${props => props.theme.colors.border};
   margin-bottom: ${props => props.theme.spacing.md}px;
   background-color: ${props => props.theme.colors.lightGray};
-  justify-content: center;
-  align-items: center;
   shadow-color: #000;
   shadow-offset: 0px 1px;
   shadow-opacity: 0.1;
@@ -80,29 +81,10 @@ const MapContainer = styled.View`
   elevation: 1;
 `;
 
-const MapPlaceholder = styled.View`
+const StyledWebView = styled(WebView)`
   width: 100%;
   height: 100%;
-  justify-content: center;
-  align-items: center;
   background-color: transparent;
-`;
-
-const MapPlaceholderText = styled(CustomText)`
-  color: ${props => props.theme.colors.placeholder};
-  font-size: ${props => props.theme.fontSize.md}px;
-  margin-bottom: ${props => props.theme.spacing.xs}px;
-  font-family: ${props => props.theme.fonts.medium};
-`;
-
-interface MapPlaceholderSubtextProps {
-  withMarginTop?: boolean;
-}
-
-const MapPlaceholderSubtext = styled(CustomText)<MapPlaceholderSubtextProps>`
-  color: ${props => props.theme.colors.placeholder};
-  font-size: ${props => props.theme.fontSize.sm}px;
-  margin-top: ${props => (props.withMarginTop ? props.theme.spacing.sm : 0)}px;
 `;
 
 const TextAreaContainer = styled.View`
@@ -244,19 +226,212 @@ interface ReportProps {
   onReportSubmit?: (data: any) => void;
 }
 
+const DEFAULT_CENTER = {
+  latitude: 36.362238,
+  longitude: 127.340214,
+};
+
+const generateKakaoTemplate = (appKey: string) => `
+  <!DOCTYPE html>
+  <html lang="ko">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+      <style>
+        html, body, #map {
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          height: 100%;
+          background-color: #f5f7fa;
+        }
+      </style>
+      <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&libraries=services,clusterer"></script>
+      <script>
+        function sendToRN(type, payload) {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, payload: payload }));
+          }
+        }
+
+        window.onerror = function(message) {
+          sendToRN("WEBVIEW_LOG", { level: "error", message: message });
+        };
+      </script>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        var map = null;
+        var currentMarker = null;
+        var selectedMarker = null;
+
+        function initializeMap() {
+          try {
+            var container = document.getElementById('map');
+            var options = {
+              center: new kakao.maps.LatLng(${DEFAULT_CENTER.latitude}, ${DEFAULT_CENTER.longitude}),
+              level: 3
+            };
+
+            map = new kakao.maps.Map(container, options);
+            
+            // 지도 클릭 이벤트
+            kakao.maps.event.addListener(map, 'click', function(mouseEvent) {        
+              var latlng = mouseEvent.latLng;
+              
+              if (selectedMarker) {
+                selectedMarker.setPosition(latlng);
+              } else {
+                var imageSrc = "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/markerStar.png"; 
+                var imageSize = new kakao.maps.Size(24, 35); 
+                var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize); 
+                
+                selectedMarker = new kakao.maps.Marker({
+                  position: latlng,
+                  map: map,
+                  image: markerImage 
+                });
+              }
+              
+              sendToRN("MAP_CLICK", { 
+                latitude: latlng.getLat(), 
+                longitude: latlng.getLng() 
+              });
+            });
+
+            sendToRN("KAKAO_READY", { level: map.getLevel() });
+          } catch (e) {
+            sendToRN("KAKAO_ERROR", e.message);
+          }
+        }
+
+        kakao.maps.load(function() {
+          initializeMap();
+        });
+
+        document.addEventListener("message", function (event) {
+          handleMessage(event.data);
+        });
+        window.addEventListener("message", function (event) {
+          handleMessage(event.data);
+        });
+
+        function handleMessage(raw) {
+          if (!map) return;
+
+          try {
+            var data = typeof raw === "string" ? JSON.parse(raw) : raw;
+
+            if (data.type === "UPDATE_LOCATION") {
+              var lat = data.payload.latitude;
+              var lng = data.payload.longitude;
+              var moveLatLon = new kakao.maps.LatLng(lat, lng);
+              
+              if (currentMarker) {
+                currentMarker.setPosition(moveLatLon);
+              } else {
+                // 현재 위치 마커
+                var imageSrc = "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png"; 
+                var imageSize = new kakao.maps.Size(64, 69); 
+                var imageOption = {offset: new kakao.maps.Point(27, 69)}; 
+                var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
+
+                currentMarker = new kakao.maps.Marker({
+                  position: moveLatLon,
+                  map: map,
+                  image: markerImage
+                });
+              }
+              
+              if (data.payload.moveMap) {
+                map.setCenter(moveLatLon);
+              }
+            } 
+          } catch (e) {
+            sendToRN("WEBVIEW_LOG", { level: "error", message: "Msg Error: " + e.message });
+          }
+        }
+      </script>
+    </body>
+  </html>
+`;
+
 export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
   const insets = useSafeAreaInsets();
+  const webViewRef = useRef<WebView>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationData | null>(null);
   const [dangerType, setDangerType] = useState<ReportType>("sidewalk_damage");
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // TODO: 나중에 카카오맵 네이티브 SDK로 교체 예정
-  const handleMapPress = (event: any) => {
-    // 지도 클릭 시 위치 선택 (SDK 연동 시 구현)
-    // const { latitude, longitude } = event.nativeEvent.coordinate;
-  };
+  const mapTemplate = useMemo(() => {
+    if (!KAKAO_JAVASCRIPT_KEY) return "";
+    return generateKakaoTemplate(KAKAO_JAVASCRIPT_KEY);
+  }, []);
+
+  // handleLocationSelect를 ref로 관리하여 무한 루프 방지
+  const handleLocationSelectRef = useRef<((latitude: number, longitude: number) => Promise<void>) | null>(null);
+
+  // handleLocationSelect 함수를 useCallback으로 안정화
+  const handleLocationSelect = useCallback(async (latitude: number, longitude: number) => {
+    try {
+      // 역지오코딩으로 주소 가져오기
+      const [address] = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      const addressString = address
+        ? `${address.region} ${address.street || ""} ${address.name || ""}`.trim()
+        : `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+
+      setSelectedLocation({
+        latitude,
+        longitude,
+        address: addressString,
+      });
+    } catch (error) {
+      console.error("역지오코딩 실패:", error);
+      // 역지오코딩 실패해도 좌표는 저장
+      setSelectedLocation({
+        latitude,
+        longitude,
+        address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    handleLocationSelectRef.current = handleLocationSelect;
+  }, [handleLocationSelect]);
+
+  // handleWebViewMessage
+  const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.type === "KAKAO_READY") {
+        // 지도 준비 완료
+      }
+      if (data.type === "MAP_CLICK") {
+        const { latitude, longitude } = data.payload;
+        if (handleLocationSelectRef.current) {
+          handleLocationSelectRef.current(latitude, longitude);
+        }
+      }
+      if (data.type === "KAKAO_ERROR") {
+        if (__DEV__) {
+          console.log("[Report] Kakao Map Error:", data.payload);
+        }
+      }
+      if (data.type === "WEBVIEW_LOG") {
+        console.log(`🌐 [Report WebView] ${data.payload.message}`);
+      }
+    } catch (error) {
+      // ignore
+    }
+  }, []);
 
   const getCurrentLocation = async () => {
     try {
@@ -285,8 +460,15 @@ export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
         address: addressString,
       });
 
-      // TODO: 카카오맵 SDK로 지도 중심 이동 및 마커 표시
-      // SDK 연동 시 지도 중심을 현재 위치로 이동하고 마커를 표시
+      // 카카오맵에 현재 위치 표시
+      if (webViewRef.current) {
+        webViewRef.current.postMessage(
+          JSON.stringify({
+            type: "UPDATE_LOCATION",
+            payload: { latitude, longitude, moveMap: true },
+          })
+        );
+      }
     } catch (error) {
       Alert.alert("오류", "위치를 가져오는 중 오류가 발생했습니다.");
       console.error(error);
@@ -342,7 +524,7 @@ export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
         },
         {
           text: "파일 업로드",
-          onPress: () => handleImagePicker(false), // 파일 업로드도 갤러리와 동일하게 처리
+          onPress: () => handleImagePicker(false),
         },
         {
           text: "취소",
@@ -360,15 +542,17 @@ export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
   const handleSubmit = async () => {
     if (!selectedLocation) {
       console.warn("⚠️ [Report.handleSubmit] 위치를 선택해주세요.");
+      Alert.alert("알림", "위치를 선택해주세요.");
       return;
     }
     if (!description.trim()) {
       console.warn("⚠️ [Report.handleSubmit] 상세 설명을 입력해주세요.");
+      Alert.alert("알림", "상세 설명을 입력해주세요.");
       return;
     }
-    // 사진은 선택사항일 수도 있지만 기존 코드에서 필수로 체크함. 그대로 유지.
     if (images.length === 0) {
       console.warn("⚠️ [Report.handleSubmit] 사진을 업로드해주세요.");
+      Alert.alert("알림", "사진을 최소 1장 업로드해주세요.");
       return;
     }
 
@@ -382,43 +566,58 @@ export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
           type: "Point",
           coordinates: [selectedLocation.longitude, selectedLocation.latitude] as [number, number],
         },
-        photoUrls: images, // Note: Real backend might expect file upload first and getting URLs back. For now sending local URIs.
-        severity: "medium", // Default
+        photoUrls: images,
+        severity: "medium",
         status: "pending_review",
       };
 
       console.log("[Report.handleSubmit] 제보 데이터 준비 완료:", reportData);
+      console.log(`[Report.handleSubmit] 제보 위치: ${selectedLocation.latitude}, ${selectedLocation.longitude}`);
 
       const response = await reportsService.createReport(reportData);
 
-      // 성공 시 콘솔에 상세 정보 출력
       console.log("[Report.handleSubmit] 제보가 성공적으로 등록되었습니다!");
-      console.log("[Report.handleSubmit] 제보 상세 정보:", {
-        제보_ID: response.id,
-        유형: reportTypes.find(t => t.value === response.type)?.label || response.type,
-        상태: response.status === "pending_review" ? "검토 대기 중" : response.status,
-        등록_시간: new Date(response.createdAt).toLocaleString("ko-KR"),
-        전체_응답_데이터: JSON.stringify(response, null, 2),
-      });
 
-      onReportSubmit?.(response);
+      if (selectedLocation) {
+        onReportSubmit?.({
+          location: {
+            latitude: selectedLocation.latitude,
+            longitude: selectedLocation.longitude,
+            address: selectedLocation.address,
+          },
+          dangerType: dangerType,
+          description: description,
+          images: images,
+        });
+      }
     } catch (error: any) {
       console.error("[Report.handleSubmit] 제보 실패:", error);
 
-      const errorMessage = error.response?.data?.detail
-        ? Array.isArray(error.response.data.detail)
-          ? error.response.data.detail.map((d: any) => d.msg || JSON.stringify(d)).join("\n")
-          : JSON.stringify(error.response.data.detail)
-        : error.response?.data?.message
-        ? error.response.data.message
-        : error.message || "제보 중 오류가 발생했습니다.";
+      let errorMessage = "제보 중 오류가 발생했습니다.";
 
-      console.error("[Report.handleSubmit] 오류 상세:", {
-        에러_메시지: errorMessage,
-        상태_코드: error.response?.status,
-        응답_데이터: error.response?.data,
-        전체_에러: JSON.stringify(error, null, 2),
-      });
+      if (error?.response?.data?.detail) {
+        if (Array.isArray(error.response.data.detail)) {
+          errorMessage = error.response.data.detail
+            .map((d: any) => d?.msg || String(d))
+            .filter(Boolean)
+            .join("\n");
+        } else {
+          try {
+            errorMessage =
+              typeof error.response.data.detail === "string"
+                ? error.response.data.detail
+                : JSON.stringify(error.response.data.detail);
+          } catch {
+            errorMessage = String(error.response.data.detail);
+          }
+        }
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      Alert.alert("제보 실패", errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -468,16 +667,27 @@ export const Report = ({ onNavigateToHome, onReportSubmit }: ReportProps) => {
               </LocationIconButton>
             </SectionTitleContainer>
             <MapContainer>
-              <TouchableOpacity
-                style={{ width: "100%", height: "100%" }}
-                onPress={handleMapPress}
-                activeOpacity={0.9}
-              >
-                <MapPlaceholder>
-                  <MapPlaceholderText>지도 영역</MapPlaceholderText>
-                  <MapPlaceholderSubtext withMarginTop>지도를 터치하여 위치를 선택하세요</MapPlaceholderSubtext>
-                </MapPlaceholder>
-              </TouchableOpacity>
+              {KAKAO_JAVASCRIPT_KEY ? (
+                <StyledWebView
+                  ref={webViewRef}
+                  originWhitelist={["*"]}
+                  source={{ html: mapTemplate, baseUrl: "http://localhost" }}
+                  javaScriptEnabled
+                  domStorageEnabled
+                  showsVerticalScrollIndicator={false}
+                  showsHorizontalScrollIndicator={false}
+                  onMessage={handleWebViewMessage}
+                />
+              ) : (
+                <View style={{ width: "100%", height: "100%", justifyContent: "center", alignItems: "center" }}>
+                  <CustomText
+                    color={theme.colors.placeholder}
+                    size={theme.fontSize.md}
+                  >
+                    Kakao Map API Key가 필요합니다
+                  </CustomText>
+                </View>
+              )}
             </MapContainer>
           </Section>
 

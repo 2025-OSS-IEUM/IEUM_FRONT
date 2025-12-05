@@ -8,7 +8,7 @@ import { theme } from "../../styles/theme";
 import { usersService } from "../../api/users";
 import { reportsService } from "../../api/reports";
 import { storage } from "../../utils/storage";
-import { ReportResponse, ReportStatus as ApiReportStatus, ReportType } from "../../types/api";
+import { ReportResponse, ReportType } from "../../types/api";
 
 const ScrollContainer = styled.ScrollView`
   flex: 1;
@@ -125,38 +125,6 @@ const TabText = styled(CustomText)<TabButtonProps>`
   font-family: ${props => (props.active ? props.theme.fonts.bold : props.theme.fonts.medium)};
 `;
 
-const FilterContainer = styled.View`
-  flex-direction: row;
-  justify-content: center;
-  padding: ${props => props.theme.spacing.md}px;
-  gap: ${props => props.theme.spacing.sm}px;
-  background-color: ${props => props.theme.colors.background};
-`;
-
-interface FilterButtonProps {
-  active?: boolean;
-}
-
-const FilterButton = styled.TouchableOpacity<FilterButtonProps>`
-  padding: ${props => props.theme.spacing.sm}px ${props => props.theme.spacing.md}px;
-  border-radius: 40px;
-  background-color: ${props => props.theme.colors.white};
-  shadow-color: #000;
-  shadow-offset: 0px 0px;
-  shadow-opacity: 0.2;
-  shadow-radius: 0.8px;
-  elevation: 2;
-  border-width: ${props => (props.active ? 1.5 : 0)}px;
-  border-color: ${props => (props.active ? props.theme.colors.primary : "transparent")};
-`;
-
-const FilterButtonText = styled.Text<FilterButtonProps>`
-  font-size: ${props => props.theme.fontSize.md}px;
-  font-weight: ${props => props.theme.fontWeight.medium};
-  color: ${props => (props.active ? props.theme.colors.primary : props.theme.colors.text.primary)};
-  font-family: ${props => props.theme.fonts.medium};
-`;
-
 const ReportListContainer = styled.View`
   padding: ${props => props.theme.spacing.md}px;
   background-color: ${props => props.theme.colors.white};
@@ -186,7 +154,7 @@ const ReportHeader = styled.View`
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0px;
+  margin-bottom: ${props => props.theme.spacing.sm}px;
 `;
 
 const ReportHeaderRight = styled.View`
@@ -194,7 +162,7 @@ const ReportHeaderRight = styled.View`
 `;
 
 const ReportTitle = styled(CustomText)`
-  font-size: ${props => props.theme.fontSize.xxl}px;
+  font-size: ${props => props.theme.fontSize.lg + 2}px;
   font-weight: ${props => props.theme.fontWeight.bold};
   color: ${props => props.theme.colors.text.primary};
   font-family: ${props => props.theme.fonts.bold};
@@ -211,7 +179,7 @@ const ReportDate = styled.Text`
 `;
 
 const ReportDescriptionContainer = styled.View`
-  margin-top: -${props => props.theme.spacing.lg}px;
+  margin-top: ${props => props.theme.spacing.xs}px;
   margin-bottom: ${props => props.theme.spacing.md}px;
 `;
 
@@ -222,31 +190,7 @@ const ReportDescription = styled.Text`
   font-family: ${props => props.theme.fonts.medium};
 `;
 
-interface StatusBadgeProps {
-  status: "approved" | "pending" | "rejected";
-}
-
-const StatusBadge = styled.View<StatusBadgeProps>`
-  padding: ${props => props.theme.spacing.xs}px ${props => props.theme.spacing.sm}px;
-  border-radius: 20px;
-  margin-top: ${props => props.theme.spacing.md}px;
-  background-color: ${props => {
-    if (props.status === "approved") return "#5773BC";
-    if (props.status === "pending") return "#4ECDC4";
-    return "#F24737";
-  }};
-`;
-
-const StatusBadgeText = styled.Text`
-  font-size: 12px;
-  font-weight: ${props => props.theme.fontWeight.bold};
-  color: ${props => props.theme.colors.white};
-  font-family: ${props => props.theme.fonts.semiBold};
-`;
-
 type TabType = "report" | "suggestion";
-type FilterType = "all" | "approved" | "pending" | "rejected";
-type ReportStatus = "approved" | "pending" | "rejected";
 
 interface ReportItemData {
   id: string;
@@ -254,22 +198,7 @@ interface ReportItemData {
   title: string;
   description: string;
   date: string;
-  status: ReportStatus;
 }
-
-// API ReportStatus를 UI ReportStatus로 변환
-const mapApiStatusToUiStatus = (apiStatus: ApiReportStatus): ReportStatus => {
-  switch (apiStatus) {
-    case "approved":
-      return "approved";
-    case "pending_review":
-      return "pending";
-    case "resolved":
-      return "approved"; // resolved는 승인 완료로 표시
-    default:
-      return "pending";
-  }
-};
 
 // ReportType을 한글 제목으로 변환
 const getReportTypeTitle = (type: ReportType): string => {
@@ -307,7 +236,6 @@ const convertReportResponseToItemData = (report: ReportResponse): ReportItemData
     title: getReportTypeTitle(report.type),
     description: report.description,
     date: formatDate(report.createdAt),
-    status: mapApiStatusToUiStatus(report.status),
   };
 };
 
@@ -318,7 +246,6 @@ interface ReportDetailsProps {
 export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<TabType>("report");
-  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [userName, setUserName] = useState("");
   const [reports, setReports] = useState<ReportItemData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -327,24 +254,42 @@ export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
-        // Try storage first
+        // First try getting user from storage as immediate display
         const storedUser = await storage.getUserInfo();
         if (storedUser) {
+          console.log("[ReportDetails] Loaded user from storage:", storedUser);
           setUserName(storedUser.name || storedUser.username);
         }
 
         const user = await usersService.getMyProfile();
-        console.log("API Response /users/me (ReportDetails):", JSON.stringify(user, null, 2));
+        console.log("[ReportDetails] API Response /users/me:", JSON.stringify(user, null, 2));
 
+        // Check if API returned mock data "홍길동"
         const isMockData = user && user.username === "홍길동" && user.user_id === "example_user";
 
-        if (user && !isMockData) {
+        if (isMockData && storedUser) {
+          // API가 mock 데이터를 반환한 경우, storage의 실제 사용자 정보를 사용
+          console.log("[ReportDetails] API returned mock data, using stored real user data instead");
+          console.log("[ReportDetails] Using real user data from storage:", JSON.stringify(storedUser, null, 2));
+          setUserName(storedUser.name || storedUser.username);
+        } else if (user && !isMockData) {
+          // API가 실제 데이터를 반환한 경우
           setUserName(user.name || user.username);
-        } else if (isMockData && storedUser) {
-          // Keep stored user
+        } else if (isMockData && !storedUser) {
+          // No stored user and API returned mock data
+          console.log("[ReportDetails] API returned mock data and no stored user found");
         }
       } catch (error) {
-        console.error("Failed to fetch profile in ReportDetails:", error);
+        console.error("[ReportDetails] Failed to fetch profile:", error);
+        // 에러 발생 시에도 storage의 데이터가 있으면 사용
+        try {
+          const storedUser = await storage.getUserInfo();
+          if (storedUser) {
+            setUserName(storedUser.name || storedUser.username);
+          }
+        } catch (storageError) {
+          console.error("[ReportDetails] Failed to get user from storage:", storageError);
+        }
       }
     };
     fetchUserProfile();
@@ -355,23 +300,43 @@ export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
       try {
         setIsLoading(true);
         setError(null);
+
+        console.log("[ReportDetails] 제보 내역 조회 시작");
+
         // 항상 API를 호출하여 현재 사용자의 제보만 가져옴
         const apiReports = await reportsService.getMyReports();
-        console.log("API Response /users/me/reports:", JSON.stringify(apiReports, null, 2));
 
-        const convertedReports = apiReports.map(convertReportResponseToItemData);
-        setReports(convertedReports);
-      } catch (error: any) {
-        console.error("Failed to fetch reports:", error);
+        console.log("[ReportDetails] API 응답 받음:", {
+          reportsCount: apiReports?.length || 0,
+          reports:
+            apiReports?.map(r => ({
+              id: r.id,
+              type: r.type,
+              createdAt: r.createdAt,
+              description: r.description?.substring(0, 50),
+            })) || [],
+        });
 
-        // 백엔드 기능이 아직 구현되지 않은 경우를 위한 안내 메시지
-        if (error.response?.status === 404 || error.response?.status === 500) {
-          setError(
-            "제보 내역 조회 기능이 아직 준비되지 않았습니다.\n" + "백엔드에 사용자별 제보 조회 API를 추가해야 합니다."
-          );
+        if (apiReports && apiReports.length > 0) {
+          const convertedReports = apiReports.map(convertReportResponseToItemData);
+          setReports(convertedReports);
+          console.log("[ReportDetails] 제보 내역 변환 완료:", convertedReports.length, "개");
         } else {
-          setError("제보 내역을 불러오는데 실패했습니다.");
+          // 제보가 없는 경우 (에러가 아님)
+          setReports([]);
+          console.log("[ReportDetails] 제보 내역이 없습니다.");
         }
+      } catch (error: any) {
+        console.error("[ReportDetails] 제보 내역 조회 실패:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          errorData: error.response?.data,
+          message: error.message,
+        });
+
+        // getMyReports는 이미 에러 처리를 하고 빈 배열을 반환하므로,
+        // 여기서 catch에 도달하는 경우는 예상치 못한 에러입니다.
+        setError("제보 내역을 불러오는데 실패했습니다.\n잠시 후 다시 시도해주세요.");
 
         // 에러 발생 시 빈 배열로 설정
         setReports([]);
@@ -382,24 +347,6 @@ export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
 
     fetchReports();
   }, []);
-
-  const getStatusText = (status: ReportStatus): string => {
-    switch (status) {
-      case "approved":
-        return "승인 완료";
-      case "pending":
-        return "승인 대기";
-      case "rejected":
-        return "미승인";
-      default:
-        return "";
-    }
-  };
-
-  const filteredReports = reports.filter(report => {
-    if (activeFilter === "all") return true;
-    return report.status === activeFilter;
-  });
 
   return (
     <Container>
@@ -473,100 +420,68 @@ export const ReportDetails = ({ onNavigateBack }: ReportDetailsProps) => {
       </TabContainer>
 
       {activeTab === "report" && (
-        <>
-          <FilterContainer>
-            <FilterButton
-              active={activeFilter === "all"}
-              onPress={() => setActiveFilter("all")}
-            >
-              <FilterButtonText active={activeFilter === "all"}>전체</FilterButtonText>
-            </FilterButton>
-            <FilterButton
-              active={activeFilter === "approved"}
-              onPress={() => setActiveFilter("approved")}
-            >
-              <FilterButtonText active={activeFilter === "approved"}>승인 완료</FilterButtonText>
-            </FilterButton>
-            <FilterButton
-              active={activeFilter === "pending"}
-              onPress={() => setActiveFilter("pending")}
-            >
-              <FilterButtonText active={activeFilter === "pending"}>승인 대기</FilterButtonText>
-            </FilterButton>
-            <FilterButton
-              active={activeFilter === "rejected"}
-              onPress={() => setActiveFilter("rejected")}
-            >
-              <FilterButtonText active={activeFilter === "rejected"}>미승인</FilterButtonText>
-            </FilterButton>
-          </FilterContainer>
-
-          <ScrollContainer>
-            <ReportListContainer>
-              {isLoading ? (
-                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
-                  <ActivityIndicator
-                    size="large"
-                    color={theme.colors.primary}
+        <ScrollContainer>
+          <ReportListContainer>
+            {isLoading ? (
+              <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                <ActivityIndicator
+                  size="large"
+                  color={theme.colors.primary}
+                />
+                <CustomText
+                  color={theme.colors.text.secondary}
+                  size={theme.fontSize.md}
+                  style={{ marginTop: theme.spacing.md }}
+                >
+                  제보 내역을 불러오는 중...
+                </CustomText>
+              </View>
+            ) : error ? (
+              <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                <CustomText
+                  color={theme.colors.error}
+                  size={theme.fontSize.md}
+                >
+                  {error}
+                </CustomText>
+              </View>
+            ) : reports.length === 0 ? (
+              <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
+                <CustomText
+                  color={theme.colors.text.secondary}
+                  size={theme.fontSize.md}
+                >
+                  제보 내역이 없습니다.
+                </CustomText>
+              </View>
+            ) : (
+              reports.map(report => (
+                <ReportItem key={report.id}>
+                  <ReportThumbnail
+                    source={typeof report.thumbnail === "string" ? { uri: report.thumbnail } : report.thumbnail}
                   />
-                  <CustomText
-                    color={theme.colors.text.secondary}
-                    size={theme.fontSize.md}
-                    style={{ marginTop: theme.spacing.md }}
-                  >
-                    제보 내역을 불러오는 중...
-                  </CustomText>
-                </View>
-              ) : error ? (
-                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
-                  <CustomText
-                    color={theme.colors.error}
-                    size={theme.fontSize.md}
-                  >
-                    {error}
-                  </CustomText>
-                </View>
-              ) : filteredReports.length === 0 ? (
-                <View style={{ padding: theme.spacing.xl, alignItems: "center" }}>
-                  <CustomText
-                    color={theme.colors.text.secondary}
-                    size={theme.fontSize.md}
-                  >
-                    제보 내역이 없습니다.
-                  </CustomText>
-                </View>
-              ) : (
-                filteredReports.map(report => (
-                  <ReportItem key={report.id}>
-                    <ReportThumbnail
-                      source={typeof report.thumbnail === "string" ? { uri: report.thumbnail } : report.thumbnail}
-                    />
-                    <ReportContent>
-                      <View>
-                        <ReportHeader>
-                          <ReportTitle>{report.title}</ReportTitle>
-                          <ReportHeaderRight>
-                            <ReportDate>{report.date}</ReportDate>
-                            <StatusBadge status={report.status}>
-                              <StatusBadgeText>{getStatusText(report.status)}</StatusBadgeText>
-                            </StatusBadge>
-                          </ReportHeaderRight>
-                        </ReportHeader>
-                        <ReportDescriptionContainer>
-                          <ReportDescription>
-                            {report.description.length > 20
-                              ? `${report.description.substring(0, 20)}...`
-                              : report.description}
-                          </ReportDescription>
-                        </ReportDescriptionContainer>
-                      </View>
-                    </ReportContent>
-                  </ReportItem>
-                ))
-              )}
-            </ReportListContainer>
-          </ScrollContainer>
-        </>
+                  <ReportContent>
+                    <View>
+                      <ReportHeader>
+                        <ReportTitle>{report.title}</ReportTitle>
+                        <ReportHeaderRight>
+                          <ReportDate>{report.date}</ReportDate>
+                        </ReportHeaderRight>
+                      </ReportHeader>
+                      <ReportDescriptionContainer>
+                        <ReportDescription>
+                          {report.description.length > 20
+                            ? `${report.description.substring(0, 20)}...`
+                            : report.description}
+                        </ReportDescription>
+                      </ReportDescriptionContainer>
+                    </View>
+                  </ReportContent>
+                </ReportItem>
+              ))
+            )}
+          </ReportListContainer>
+        </ScrollContainer>
       )}
     </Container>
   );

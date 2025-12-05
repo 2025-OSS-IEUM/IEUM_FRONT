@@ -31,6 +31,19 @@ apiClient.interceptors.request.use(
       const token = await storage.getToken();
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
+        // 디버깅: 토큰이 제대로 전달되는지 확인
+        if (__DEV__ && config.url?.includes("/reports/")) {
+          console.log("[axios.interceptor] Authorization 헤더 추가됨:", {
+            url: config.url,
+            hasToken: !!token,
+            tokenPrefix: token.substring(0, 20) + "...",
+          });
+        }
+      } else {
+        console.warn("[axios.interceptor] 토큰이 없습니다:", {
+          url: config.url,
+          isPublicEndpoint,
+        });
       }
     }
 

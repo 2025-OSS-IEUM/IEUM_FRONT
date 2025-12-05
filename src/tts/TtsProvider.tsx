@@ -16,7 +16,7 @@ interface TtsProviderProps {
   children: React.ReactNode;
 }
 
-export const TtsProvider: React.FC<TtsProviderProps> = ({ children }) => {
+export const TtsProvider = ({ children }: TtsProviderProps) => {
   const [settings, setSettings] = useState<TtsSettings>(DEFAULT_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
 

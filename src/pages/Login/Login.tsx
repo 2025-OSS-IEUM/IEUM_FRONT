@@ -122,7 +122,7 @@ export const Login = ({
       try {
         setIsLoading(true);
         const response = await authService.login({
-          username: id,
+          username: id.trim(),
           password: password,
         });
 

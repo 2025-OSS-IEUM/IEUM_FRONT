@@ -15,8 +15,8 @@ import { MapSearch } from "./MapSearch";
 import { PlaceDetailSheet } from "./PlaceDetailSheet";
 import { useScreenReader } from "../../tts";
 
-const KAKAO_MAP_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY;
-const KAKAO_REST_API_KEY = process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY;
+// Kakao Map Key (지도 표시용)
+const KAKAO_JAVASCRIPT_KEY = process.env.EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY;
 
 interface Coordinate {
   latitude: number;
@@ -44,6 +44,7 @@ const MapWrapper = styled.View`
 
 const StyledWebView = styled(WebView)`
   flex: 1;
+  opacity: 0.99;
 `;
 
 const OverlayContainer = styled.View`
@@ -271,11 +272,9 @@ interface RouteData {
   guides: Guide[];
 }
 
-// ... existing code ...
-
 const ROUTE_DEVIATION_THRESHOLD = 30;
-const TURN_ANGLE_THRESHOLD = 15; // 최소 회전 각도 (도)
-const MIN_TURN_DISTANCE = 20; // 최소 회전 간격 (미터)
+const TURN_ANGLE_THRESHOLD = 15;
+const MIN_TURN_DISTANCE = 20;
 
 const getInstructionFromGuide = (guide: Guide, distance: number) => {
   const roundedDist = Math.round(distance / 10) * 10;
@@ -295,9 +294,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return Math.round(d * 1000);
 };
 
-/**
- * 두 좌표 간의 방향(bearing)을 계산합니다 (0-360도)
- */
 const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
   const lat1Rad = (lat1 * Math.PI) / 180;
@@ -311,13 +307,9 @@ const calculateBearing = (lat1: number, lon1: number, lat2: number, lon2: number
   return bearing;
 };
 
-/**
- * 방향 변화를 분석해서 회전 유형을 판단합니다
- */
 const detectTurnType = (prevBearing: number, nextBearing: number): { type: number; guidance: string } => {
   let angleDiff = nextBearing - prevBearing;
 
-  // 각도 차이를 -180 ~ 180 범위로 정규화
   if (angleDiff > 180) {
     angleDiff -= 360;
   } else if (angleDiff < -180) {
@@ -326,12 +318,10 @@ const detectTurnType = (prevBearing: number, nextBearing: number): { type: numbe
 
   const absAngle = Math.abs(angleDiff);
 
-  // 직진 (각도 변화가 작음)
   if (absAngle < TURN_ANGLE_THRESHOLD) {
     return { type: 1, guidance: "직진" };
   }
 
-  // 좌회전
   if (angleDiff > 0) {
     if (absAngle < 45) {
       return { type: 6, guidance: "약간 좌회전" };
@@ -340,9 +330,7 @@ const detectTurnType = (prevBearing: number, nextBearing: number): { type: numbe
     } else {
       return { type: 8, guidance: "왼쪽으로 유턴" };
     }
-  }
-  // 우회전
-  else {
+  } else {
     if (absAngle < 45) {
       return { type: 3, guidance: "약간 우회전" };
     } else if (absAngle < 135) {
@@ -353,9 +341,6 @@ const detectTurnType = (prevBearing: number, nextBearing: number): { type: numbe
   }
 };
 
-/**
- * 경로 좌표 배열을 분석해서 방향 전환점(Guide)을 생성합니다
- */
 const generateGuidesFromPath = (path: Coordinate[]): Guide[] => {
   if (path.length < 3) {
     return [];
@@ -369,12 +354,9 @@ const generateGuidesFromPath = (path: Coordinate[]): Guide[] => {
     const current = path[i];
     const next = path[i + 1];
 
-    // 이전 구간의 방향
     const prevBearing = calculateBearing(prev.latitude, prev.longitude, current.latitude, current.longitude);
-    // 다음 구간의 방향
     const nextBearing = calculateBearing(current.latitude, current.longitude, next.latitude, next.longitude);
 
-    // 방향 변화 계산
     let angleDiff = nextBearing - prevBearing;
     if (angleDiff > 180) {
       angleDiff -= 360;
@@ -384,11 +366,9 @@ const generateGuidesFromPath = (path: Coordinate[]): Guide[] => {
 
     const absAngle = Math.abs(angleDiff);
 
-    // 회전이 감지되면 가이드 생성
     if (absAngle >= TURN_ANGLE_THRESHOLD) {
       const segmentDistance = calculateDistance(prev.latitude, prev.longitude, current.latitude, current.longitude);
 
-      // 최소 거리 이상 떨어진 경우만 가이드 추가
       if (segmentDistance >= MIN_TURN_DISTANCE || guides.length === 0) {
         const turnInfo = detectTurnType(prevBearing, nextBearing);
         guides.push({
@@ -411,106 +391,76 @@ const generateGuidesFromPath = (path: Coordinate[]): Guide[] => {
   return guides;
 };
 
-const generateKakaoMapTemplate = (apiKey: string) => `
+const generateKakaoTemplate = (appKey: string) => `
   <!DOCTYPE html>
   <html lang="ko">
     <head>
       <meta charset="utf-8" />
-      <meta
-        name="viewport"
-        content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-      />
+      <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
       <style>
         html, body, #map {
           margin: 0;
           padding: 0;
+          width: 100%;
           height: 100%;
           background-color: #f5f7fa;
         }
       </style>
-      <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&autoload=false&libraries=services"></script>
-    </head>
-    <body>
-      <div id="map"></div>
+      <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&libraries=services,clusterer"></script>
       <script>
-        var map = null;
-        var currentMarker = null;
-        var currentCircle = null;
-        var destinationMarker = null;
-        var polyline = null;
-        var ps = null;
-        var isNavigating = false;
-        var currentHeading = null;
-        var defaultMarkerImage = null;
-
-        function getDefaultMarkerImage() {
-          if (defaultMarkerImage) {
-            return defaultMarkerImage;
-          }
-          var imageSrc = "data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2264%22%20height%3D%2269%22%20viewBox%3D%220%200%2064%2069%22%3E%3Cpath%20fill%3D%22%230076EF%22%20d%3D%22M32%2069C32%2069%204%2044.5%204%2028C4%2012.536%2016.536%200%2032%200C47.464%200%2060%2012.536%2060%2028C60%2044.5%2032%2069%2032%2069Z%22%2F%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2228%22%20r%3D%2218%22%20fill%3D%22white%22%2F%3E%3Ctext%20x%3D%2232%22%20y%3D%2233%22%20font-family%3D%22sans-serif%22%20font-size%3D%2212%22%20text-anchor%3D%22middle%22%20fill%3D%22%230076EF%22%20font-weight%3D%22bold%22%3EIEUM%3C%2Ftext%3E%3C%2Fsvg%3E";
-          var imageSize = new kakao.maps.Size(64, 69); 
-          var imageOption = {offset: new kakao.maps.Point(32, 69)}; 
-          defaultMarkerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
-          return defaultMarkerImage;
-        }
-
-        function createHeadingMarkerImage(angle) {
-          var normalized = ((angle % 360) + 360) % 360;
-          var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" fill="white" stroke="#0076EF" stroke-width="4"/><g transform="rotate(' + normalized + ' 30 30)"><path d="M30 8L39 32L30 27L21 32L30 8Z" fill="#0076EF"/></g></svg>';
-          var encoded = encodeURIComponent(svg);
-          var imageSrc = "data:image/svg+xml;charset=utf-8," + encoded;
-          var imageSize = new kakao.maps.Size(60, 60);
-          var imageOption = { offset: new kakao.maps.Point(30, 30) };
-          return new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
-        }
-
-        function updateMarkerImage() {
-          if (!currentMarker) {
-            return;
-          }
-          if (isNavigating && typeof currentHeading === "number") {
-            currentMarker.setImage(createHeadingMarkerImage(currentHeading));
-          } else {
-            currentMarker.setImage(getDefaultMarkerImage());
-          }
-        }
-
         function sendToRN(type, payload) {
           if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, payload: payload }));
           }
         }
 
-        window.addEventListener("error", function (event) {
-          sendToRN("KAKAO_ERROR", event.message || "Unknown script error");
-        });
+        window.onerror = function(message) {
+          sendToRN("WEBVIEW_LOG", { level: "error", message: message });
+        };
+      </script>
+    </head>
+    <body>
+      <div id="map"></div>
+      <script>
+        var map = null;
+        var currentMarker = null;
+        var destinationMarker = null;
+        var polyline = null;
+        var places = null;
+        var isNavigating = false;
+        var currentHeading = 0;
 
-        kakao.maps.load(function () {
+        function initializeMap() {
           try {
-            var container = document.getElementById("map");
+            var container = document.getElementById('map');
             var options = {
               center: new kakao.maps.LatLng(${DEFAULT_CENTER.latitude}, ${DEFAULT_CENTER.longitude}),
               level: 3
             };
-            map = new kakao.maps.Map(container, options);
-            
-            // 장소 검색 객체 생성
-            ps = new kakao.maps.services.Places();
 
-            // 커스텀 마커 이미지 (IEUM 브랜드 컬러 적용)
-            // 실제 ieum.svg 파일 내용을 Base64로 변환하여 넣으면 더 정확합니다.
-            // 현재는 브랜드 컬러(#0076EF)를 적용한 커스텀 핀 아이콘을 사용합니다.
+            map = new kakao.maps.Map(container, options);
+            places = new kakao.maps.services.Places();
+            
+            // 기본 마커 이미지 설정
+            var imageSrc = "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png"; 
+            var imageSize = new kakao.maps.Size(64, 69); 
+            var imageOption = {offset: new kakao.maps.Point(27, 69)}; 
+            var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
+
             currentMarker = new kakao.maps.Marker({
-               position: options.center,
-               image: getDefaultMarkerImage()
+              position: new kakao.maps.LatLng(${DEFAULT_CENTER.latitude}, ${DEFAULT_CENTER.longitude}),
+              image: markerImage
             });
             currentMarker.setMap(map);
-            updateMarkerImage();
 
             sendToRN("KAKAO_READY", { level: map.getLevel() });
-          } catch (error) {
-            sendToRN("KAKAO_ERROR", error && error.message ? error.message : "Unknown Kakao error");
+          } catch (e) {
+            sendToRN("KAKAO_ERROR", e.message);
           }
+        }
+
+        kakao.maps.load(function() {
+          initializeMap();
         });
 
         document.addEventListener("message", function (event) {
@@ -521,156 +471,128 @@ const generateKakaoMapTemplate = (apiKey: string) => `
         });
 
         function handleMessage(raw) {
+          if (!map) return;
+
           try {
-             var data = typeof raw === "string" ? JSON.parse(raw) : raw;
-             
-             if (data.type === "UPDATE_LOCATION") {
-                var lat = data.payload.latitude;
-                var lng = data.payload.longitude;
-                var newPos = new kakao.maps.LatLng(lat, lng);
+            var data = typeof raw === "string" ? JSON.parse(raw) : raw;
 
-                if (map) {
-                   if (data.payload.moveMap) {
-                     map.panTo(newPos);
-                   }
+            if (data.type === "UPDATE_LOCATION") {
+              var lat = data.payload.latitude;
+              var lng = data.payload.longitude;
+              var moveLatLon = new kakao.maps.LatLng(lat, lng);
+              
+              if (currentMarker) {
+                currentMarker.setPosition(moveLatLon);
+              }
+              
+              if (data.payload.moveMap) {
+                map.setCenter(moveLatLon);
+              }
+            } 
+            else if (data.type === "SET_DESTINATION") {
+              var place = data.payload.place;
+              var routePath = data.payload.routePath;
+              var lat = parseFloat(place.y);
+              var lng = parseFloat(place.x);
+              var destLatLon = new kakao.maps.LatLng(lat, lng);
 
-                   if (currentMarker) {
-                      currentMarker.setPosition(newPos);
-                      updateMarkerImage();
-                   }
-                   if (currentCircle) {
-                      currentCircle.setMap(null);
-                   }
-                   currentCircle = new kakao.maps.Circle({
-                      center: newPos,
-                      radius: 30, 
-                      strokeWeight: 1,
-                      strokeColor: '#0076EF',
-                      strokeOpacity: 0.1,
-                      strokeStyle: 'solid',
-                      fillColor: '#0076EF',
-                      fillOpacity: 0.2
-                   });
-                   currentCircle.setMap(map);
-                }
-             } else if (data.type === "SEARCH_KEYWORD") {
-                var keyword = data.payload;
-                if (!ps) {
-                  sendToRN("KAKAO_ERROR", "Places service not initialized");
-                  sendToRN("SEARCH_RESULT", []);
-                  return;
-                }
-                
-                if (!keyword || typeof keyword !== "string" || keyword.trim().length === 0) {
-                  sendToRN("SEARCH_RESULT", []);
-                  return;
-                }
-                
-                try {
-                  // 검색 시 옵션이 없으면 기본적으로 전체 지역 검색
-                  ps.keywordSearch(keyword, function(resultData, status, pagination) {
-                     try {
-                       var safeData = Array.isArray(resultData) ? resultData : [];
-                       var mappedResults = safeData.map(function(place) {
-                          return {
-                            id: place && place.id ? place.id : "",
-                            place_name: place && place.place_name ? place.place_name : "",
-                            address_name: place && place.address_name ? place.address_name : "",
-                            road_address_name: place && place.road_address_name ? place.road_address_name : "",
-                            x: place && place.x ? place.x : "",
-                            y: place && place.y ? place.y : "",
-                            phone: place && place.phone ? place.phone : "",
-                            category_group_name: place && place.category_group_name ? place.category_group_name : ""
-                          };
-                       });
+              // 목적지 마커
+              if (destinationMarker) destinationMarker.setMap(null);
+              destinationMarker = new kakao.maps.Marker({
+                position: destLatLon
+              });
+              destinationMarker.setMap(map);
 
-                       if (status === kakao.maps.services.Status.OK) {
-                          sendToRN("SEARCH_RESULT", mappedResults);
-                       } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
-                          sendToRN("SEARCH_RESULT", []);
-                       } else {
-                          if (mappedResults.length > 0) {
-                            // status가 null이거나 기타 값이어도 결과가 있으면 우선 전달
-                            sendToRN("SEARCH_RESULT", mappedResults);
-                            sendToRN("KAKAO_ERROR", "Search status: " + status + " (results delivered), keyword: " + keyword);
-                          } else {
-                            sendToRN("KAKAO_ERROR", "Search failed with status: " + status + ", keyword: " + keyword);
-                            sendToRN("SEARCH_RESULT", []);
-                          }
-                       }
-                     } catch (error) {
-                       console.error("Error processing search results:", error);
-                       sendToRN("KAKAO_ERROR", "Search result parsing error: " + (error && error.message ? error.message : "unknown"));
-                       sendToRN("SEARCH_RESULT", []);
-                     }
-                  });
-                } catch (error) {
-                  console.error("Error calling keywordSearch:", error);
-                  sendToRN("KAKAO_ERROR", "keywordSearch failed: " + (error && error.message ? error.message : "unknown"));
-                  sendToRN("SEARCH_RESULT", []);
-                }
-             } else if (data.type === "SET_DESTINATION") {
-                var place = data.payload.place;
-                var routePath = data.payload.routePath;
-                var lat = place.y;
-                var lng = place.x;
-                var destPos = new kakao.maps.LatLng(lat, lng);
-                
-                if (map) {
-                  if (destinationMarker) {
-                    destinationMarker.setMap(null);
-                  }
-                  destinationMarker = new kakao.maps.Marker({
-                    position: destPos
-                  });
-                  destinationMarker.setMap(map);
+              // 경로 그리기
+              if (polyline) {
+                polyline.setMap(null);
+                polyline = null;
+              }
 
-                  if (polyline) {
-                    polyline.setMap(null);
-                  }
+              if (routePath && routePath.length > 0) {
+                sendToRN("WEBVIEW_LOG", { level: "info", message: "Drawing Polyline with " + routePath.length + " points." });
 
-                  if (currentMarker && routePath && routePath.length > 0) {
-                    // 경로 좌표 배열을 kakao.maps.LatLng 객체 배열로 변환
-                    var path = routePath.map(function(coord) {
-                      return new kakao.maps.LatLng(coord.latitude, coord.longitude);
-                    });
-                    
-                    polyline = new kakao.maps.Polyline({
-                      path: path,
-                      strokeWeight: 5,
-                      strokeColor: '#0076EF',
-                      strokeOpacity: 0.7,
-                      strokeStyle: 'solid'
-                    });
-                    polyline.setMap(map);
-                    
-                    // 지도 범위 재설정 (경로 전체를 포함하도록)
-                    var bounds = new kakao.maps.LatLngBounds();
-                    bounds.extend(currentMarker.getPosition());
-                    bounds.extend(destPos);
-                    // 경로의 모든 좌표를 bounds에 추가
-                    path.forEach(function(point) {
-                      bounds.extend(point);
-                    });
-                    map.setBounds(bounds);
-                  }
-                }
-             } else if (data.type === "SET_NAVIGATION_STATE") {
-                isNavigating = !!(data.payload && data.payload.isNavigating);
-                updateMarkerImage();
-             } else if (data.type === "UPDATE_HEADING") {
-                if (typeof data.payload === "number") {
-                  currentHeading = data.payload;
-                } else {
-                  currentHeading = null;
-                }
-                if (isNavigating) {
-                  updateMarkerImage();
-                }
-             }
+                var linePath = routePath.map(function(p) { 
+                  return new kakao.maps.LatLng(p.latitude, p.longitude); 
+                });
+
+                polyline = new kakao.maps.Polyline({
+                  path: linePath,
+                  strokeWeight: 6,
+                  strokeColor: '#0076EF',
+                  strokeOpacity: 0.8,
+                  strokeStyle: 'solid'
+                });
+                polyline.setMap(map);
+
+                // 지도 범위 재설정
+                var bounds = new kakao.maps.LatLngBounds();
+                linePath.forEach(function(p) { bounds.extend(p); });
+                map.setBounds(bounds);
+              } else {
+                sendToRN("WEBVIEW_LOG", { level: "warn", message: "No route path provided to draw." });
+              }
+            }
+            else if (data.type === "SET_NAVIGATION_STATE") {
+              isNavigating = !!data.payload.isNavigating;
+              if (isNavigating) {
+                 map.setLevel(1); // 줌인
+              } else {
+                 map.setLevel(3); // 줌아웃
+              }
+            }
+            else if (data.type === "SEARCH_KEYWORD") {
+              // payload: { keyword, latitude, longitude }
+              searchKeyword(data.payload.keyword, data.payload.latitude, data.payload.longitude);
+            }
+
           } catch (e) {
-            // ignore
+            sendToRN("WEBVIEW_LOG", { level: "error", message: "Msg Error: " + e.message });
           }
+        }
+
+        function searchKeyword(keyword, lat, lng) {
+           if (!places) {
+             try {
+               places = new kakao.maps.services.Places();
+             } catch (e) {
+               sendToRN("WEBVIEW_LOG", { level: "error", message: "Places init error: " + e.message });
+               return;
+             }
+           }
+           
+           var options = {};
+           if (lat && lng) {
+             // 거리순 정렬을 위해서는 location과 radius(또는 useMapBounds:true)가 필요할 수 있음
+             // 여기서는 현재 위치 기준 20km 반경 내 검색 + 거리순 정렬
+             options.location = new kakao.maps.LatLng(lat, lng);
+             options.radius = 20000; // 20km
+             options.sort = kakao.maps.services.SortBy.DISTANCE;
+           }
+
+           places.keywordSearch(keyword, function(result, status) {
+              if (status === kakao.maps.services.Status.OK) {
+                 var data = result.map(function(p) {
+                    return {
+                      id: p.id,
+                      place_name: p.place_name,
+                      address_name: p.address_name,
+                      road_address_name: p.road_address_name,
+                      x: p.x,
+                      y: p.y,
+                      distance: p.distance
+                    };
+                 });
+                 sendToRN("SEARCH_RESULT", data);
+              } else {
+                 var msg = "Search status: " + status;
+                 if (status === kakao.maps.services.Status.ZERO_RESULT) {
+                   msg = "검색 결과가 없습니다.";
+                 }
+                 sendToRN("WEBVIEW_LOG", { level: "warn", message: msg });
+                 sendToRN("SEARCH_RESULT", []);
+              }
+           }, options);
         }
       </script>
     </body>
@@ -706,32 +628,25 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [hasReadInitialLocation, setHasReadInitialLocation] = useState(false);
   const [hasReadDestination, setHasReadDestination] = useState(false);
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const mapTemplate = useMemo(() => {
-    if (!KAKAO_MAP_KEY) return "";
-    return generateKakaoMapTemplate(KAKAO_MAP_KEY);
+    if (!KAKAO_JAVASCRIPT_KEY) return "";
+    return generateKakaoTemplate(KAKAO_JAVASCRIPT_KEY);
   }, []);
 
   const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
       if (data.type === "KAKAO_READY") {
-        requestLocation(true);
-      }
-      if (data.type === "KAKAO_ERROR") {
-        // 에러가 발생해도 검색 상태는 해제
-        setIsSearching(false);
-        // 에러 로그는 개발 환경에서만 출력
-        if (__DEV__) {
-          console.log("[Map] Kakao Error:", data.payload);
-        }
+        setIsMapReady(true);
       }
       if (data.type === "SEARCH_RESULT") {
-        if (__DEV__) {
-          console.log("[Map] WebView SEARCH_RESULT:", Array.isArray(data.payload) ? data.payload.length : data.payload);
-        }
         setSearchResults(data.payload);
         setIsSearching(false);
+      }
+      if (data.type === "WEBVIEW_LOG") {
+        console.log(`🌐 [WebView] ${data.payload.message}`);
       }
     } catch (error) {
       // ignore
@@ -747,9 +662,7 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const calculateRemainingDistance = useCallback(
     (origin: Coordinate, place: Place | null) => {
-      if (!place) {
-        return null;
-      }
+      if (!place) return null;
       const destinationCoord = getCoordinateFromPlace(place);
       return calculateDistance(
         origin.latitude,
@@ -762,147 +675,83 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
   );
 
   const searchPlaces = useCallback(
-    async (keyword: string) => {
-      if (!KAKAO_REST_API_KEY) {
-        console.warn("카카오 REST API 키가 설정되지 않았습니다.");
-        setSearchResults([]);
-        setIsSearching(false);
-        return;
-      }
-
-      if (__DEV__) {
-        console.log("[Map] searchPlaces called:", keyword);
-      }
-      try {
-        const params = new URLSearchParams({
-          query: keyword,
-          size: "15",
-        });
-
-        if (currentCoordinate) {
-          params.append("x", currentCoordinate.longitude.toString());
-          params.append("y", currentCoordinate.latitude.toString());
-        }
-
-        const requestUrl = `https://dapi.kakao.com/v2/local/search/keyword.json?${params.toString()}`;
-        if (__DEV__) {
-          console.log("[Map] searchPlaces request:", requestUrl);
-        }
-
-        const response = await fetch(requestUrl, {
-          method: "GET",
-          headers: {
-            Authorization: `KakaoAK ${KAKAO_REST_API_KEY}`,
+    (keyword: string) => {
+      if (!webViewRef.current) return;
+      webViewRef.current.postMessage(
+        JSON.stringify({
+          type: "SEARCH_KEYWORD",
+          payload: {
+            keyword: keyword,
+            latitude: currentCoordinate.latitude,
+            longitude: currentCoordinate.longitude,
           },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Status ${response.status} ${response.statusText}: ${errorText}`);
-        }
-
-        const data = await response.json();
-        if (__DEV__) {
-          console.log(
-            "[Map] searchPlaces response:",
-            data?.meta?.total_count,
-            Array.isArray(data?.documents) ? data.documents.length : "no-docs"
-          );
-        }
-        if (Array.isArray(data?.documents)) {
-          const normalized: Place[] = data.documents.map((doc: any, index: number) => ({
-            id: doc?.id || `${doc?.x || "0"}_${doc?.y || "0"}_${doc?.place_name || index}`,
-            place_name: doc?.place_name || "",
-            address_name: doc?.address_name || "",
-            road_address_name: doc?.road_address_name || "",
-            x: doc?.x || "0",
-            y: doc?.y || "0",
-          }));
-          setSearchResults(normalized);
-        } else {
-          setSearchResults([]);
-        }
-      } catch (error) {
-        console.log("[Map] Kakao 검색 실패:", error);
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
+        })
+      );
     },
     [currentCoordinate]
   );
 
   const handleSearch = (keyword: string) => {
-    if (__DEV__) {
-      console.log("[Map] handleSearch:", keyword);
-    }
     const trimmedKeyword = keyword.trim();
     if (!trimmedKeyword) {
       setSearchResults([]);
       return;
     }
-
     setIsSearching(true);
-
-    if (KAKAO_REST_API_KEY) {
-      searchPlaces(trimmedKeyword);
-      return;
-    }
-
-    if (__DEV__) {
-      console.log("[Map] using WebView search fallback");
-    }
-    if (webViewRef.current) {
-      webViewRef.current.postMessage(
-        JSON.stringify({
-          type: "SEARCH_KEYWORD",
-          payload: trimmedKeyword,
-        })
-      );
-      return;
-    }
-
-    setIsSearching(false);
+    searchPlaces(trimmedKeyword);
   };
 
   const getWalkingRoute = useCallback(
     async (origin: Coordinate, destination: Coordinate): Promise<RouteData | null> => {
       try {
-        const response = await routesService.getRouteCandidates({
+        console.log("[Map] 경로 탐색 시작:", { origin, destination });
+
+        // 1. 안전 경로 분석 요청 (Backend에서 TMap 호출 및 분석 통합 수행)
+        const routeRequest = {
           start_lat: origin.latitude,
           start_lon: origin.longitude,
           end_lat: destination.latitude,
           end_lon: destination.longitude,
-        });
+          alternatives: true,
+        };
 
-        if (response.routes && response.routes.length > 0) {
-          // 일단 첫 번째 경로를 사용
-          const route = response.routes[0];
+        console.log("[Map] 1. 안전 경로 분석 요청:", routeRequest);
+        // 기존 getRouteCandidates 호출 제거 -> getSafeRouteWithScores에 좌표 직접 전송
+        const safeResponse = await routesService.getSafeRouteWithScores(routeRequest);
 
-          // 경로 좌표 변환
-          const linePath: Coordinate[] = route.path.map(p => ({
-            latitude: p.lat,
-            longitude: p.lon,
-          }));
+        const bestIndex = safeResponse.bestRouteIndex;
+        const bestRoute = safeResponse.routes[bestIndex];
 
-          // 경로 좌표 배열을 분석해서 방향 전환점(Guide) 생성
-          const guides = generateGuidesFromPath(linePath);
-
-          return { path: linePath, guides };
+        if (!bestRoute) {
+          console.warn(
+            `[Map] 추천 경로(Index: ${bestIndex})가 routes(Length: ${safeResponse.routes.length})에 없습니다.`
+          );
+          return null;
         }
 
-        return null;
-      } catch (error: any) {
-        // 에러를 더 자세히 로깅하되, 사용자에게는 친화적인 메시지만 표시
-        const errorMessage = error?.message || "경로 조회에 실패했습니다";
-        console.error("❌ [Map.getWalkingRoute] 경로 조회 실패:", {
-          message: errorMessage,
-          status: error?.status,
-          originalError: error?.originalError,
-        });
+        console.log(
+          `[Map] 안전 경로 분석 완료. 추천 경로 인덱스: ${bestIndex}, 안전 점수: ${bestRoute.safetyScore}, 거리: ${bestRoute.distance}`
+        );
+        console.log(`[Map] 경로 포인트 수: ${bestRoute.path.length}`);
 
-        // 에러가 발생해도 기본 경로(직선)를 사용할 수 있도록 null 반환
-        // TTS로 에러 메시지를 읽지 않도록 주의
+        // 2. 경로 데이터 변환
+        // Backend coordinates (lat, lon) -> Map Coordinate (latitude, longitude)
+        const path: Coordinate[] = bestRoute.path.map(p => ({
+          latitude: p.lat,
+          longitude: p.lon,
+        }));
+
+        // 3. 가이드 생성 (Turn-by-turn instructions)
+        // 백엔드에서 가이드 정보를 주지 않으므로 path 기반으로 클라이언트에서 생성
+        const guides = generateGuidesFromPath(path);
+
+        return { path, guides };
+      } catch (error) {
+        console.error("[Map] 경로 탐색 실패:", error);
+
+        // 백엔드 호출 실패 시 TMap으로 폴백하거나 에러 처리
+        // 여기서는 기존 TMap 로직을 폴백으로 유지할 수도 있지만,
+        // 사용자 요청이 "백엔드 연동"이므로 실패 시 null 반환하여 에러 표시
         return null;
       }
     },
@@ -922,43 +771,30 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
     );
     setDistance(dist);
 
-    // 최근 선택한 장소에 추가 (최대 5개, 중복 제거)
     setRecentPlaces(prev => {
-      // 중복 제거 (같은 id가 있으면 제거)
       const filtered = prev.filter(p => p.id !== place.id);
-      // 새로운 장소를 맨 앞에 추가
-      const updated = [place, ...filtered];
-      // 최대 5개까지만 유지
-      return updated.slice(0, 5);
+      return [place, ...filtered].slice(0, 5);
     });
 
-    // 지도에 목적지 마커 표시
     if (webViewRef.current) {
       webViewRef.current.postMessage(
         JSON.stringify({
           type: "SET_DESTINATION",
-          payload: {
-            place: place,
-            routePath: [],
-          },
+          payload: { place, routePath: [] },
         })
       );
     }
   };
 
   const sendRouteToWebView = useCallback((place: Place, route: Coordinate[]) => {
-    if (!webViewRef.current) {
-      return;
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(
+        JSON.stringify({
+          type: "SET_DESTINATION",
+          payload: { place, routePath: route },
+        })
+      );
     }
-    webViewRef.current.postMessage(
-      JSON.stringify({
-        type: "SET_DESTINATION",
-        payload: {
-          place,
-          routePath: route,
-        },
-      })
-    );
   }, []);
 
   const buildRouteBetween = useCallback(
@@ -966,7 +802,6 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
       try {
         const destinationCoord = getCoordinateFromPlace(place);
         const routeData = await getWalkingRoute(origin, destinationCoord);
-
         const path = routeData?.path || [origin, destinationCoord];
         const guides = routeData?.guides || [];
 
@@ -974,31 +809,29 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
         setRouteGuides(guides);
 
         if (guides.length > 0) {
-          // 첫 번째 가이드 설정
           const firstGuide = guides[0];
+          // 첫 번째 가이드까지의 거리는 API에서 제공하거나 직접 계산
+          // 여기서는 단순화를 위해 직접 계산
           const dist = calculateDistance(origin.latitude, origin.longitude, firstGuide.y, firstGuide.x);
           setCurrentInstruction(getInstructionFromGuide(firstGuide, dist));
         } else {
-          // 경로 조회 실패 시에도 기본 안내 메시지 설정 (에러 메시지가 TTS로 읽히지 않도록)
           setCurrentInstruction("목적지까지 직진입니다");
         }
 
+        // 전체 거리 (API에서 제공하지 않을 경우 직선거리 사용)
+        // TMap API 응답을 파싱할 때 totalDistance를 가져오는 것이 좋지만, 현재 로직에서는 place와 origin 거리로 설정
         setDistance(
           calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
         );
+
         sendRouteToWebView(place, path);
         return path;
-      } catch (error: any) {
-        // 예상치 못한 에러 발생 시에도 안전한 기본 메시지 설정
-        console.error("❌ [Map.buildRouteBetween] 예상치 못한 에러:", error);
+      } catch {
         const destinationCoord = getCoordinateFromPlace(place);
         const fallbackPath = [origin, destinationCoord];
         setRoutePath(fallbackPath);
         setRouteGuides([]);
         setCurrentInstruction("목적지까지 직진입니다");
-        setDistance(
-          calculateDistance(origin.latitude, origin.longitude, destinationCoord.latitude, destinationCoord.longitude)
-        );
         sendRouteToWebView(place, fallbackPath);
         return fallbackPath;
       }
@@ -1026,9 +859,8 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
   const getClosestDistanceToPath = useCallback(
     (coord: Coordinate, path: Coordinate[]) => {
       if (!path || path.length === 0) return Infinity;
-      return path.reduce((minDistance, point) => {
-        const dist = calculateDistance(coord.latitude, coord.longitude, point.latitude, point.longitude);
-        return Math.min(minDistance, dist);
+      return path.reduce((min, point) => {
+        return Math.min(min, calculateDistance(coord.latitude, coord.longitude, point.latitude, point.longitude));
       }, Infinity);
     },
     [calculateDistance]
@@ -1036,8 +868,7 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const updateNavigationInstruction = useCallback(
     (coord: Coordinate) => {
-      if (routeGuides.length === 0 || routePath.length === 0) {
-        // 가이드가 없으면 목적지까지 직진 안내
+      if (routeGuides.length === 0) {
         if (destination) {
           const destCoord = getCoordinateFromPlace(destination);
           const remainingDist = calculateDistance(
@@ -1046,67 +877,24 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
             destCoord.latitude,
             destCoord.longitude
           );
-          if (remainingDist > 0) {
-            setCurrentInstruction(`${remainingDist}m 앞까지 직진입니다`);
-          }
+          if (remainingDist > 0) setCurrentInstruction(`${remainingDist}m 앞까지 직진입니다`);
         }
         return;
       }
-
-      // 경로 상에서 현재 위치에 가장 가까운 점 찾기
-      let closestPathIndex = 0;
-      let minPathDistance = Infinity;
-
+      let closestIdx = 0;
+      let minPathDist = Infinity;
       for (let i = 0; i < routePath.length; i++) {
-        const pathPoint = routePath[i];
-        const dist = calculateDistance(coord.latitude, coord.longitude, pathPoint.latitude, pathPoint.longitude);
-        if (dist < minPathDistance) {
-          minPathDistance = dist;
-          closestPathIndex = i;
+        const d = calculateDistance(coord.latitude, coord.longitude, routePath[i].latitude, routePath[i].longitude);
+        if (d < minPathDist) {
+          minPathDist = d;
+          closestIdx = i;
         }
       }
 
-      // 경로 상의 현재 위치 이후에 있는 가이드 찾기
-      let nextGuide: Guide | null = null;
-      let minDistance = Infinity;
-
-      for (const guide of routeGuides) {
-        // 가이드의 road_index가 현재 경로 위치보다 앞에 있으면 다음 가이드
-        if (guide.road_index > closestPathIndex) {
-          const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
-          if (dist < minDistance) {
-            minDistance = dist;
-            nextGuide = guide;
-          }
-        }
-      }
-
-      // 다음 가이드를 찾지 못했지만 가이드가 있으면, 가장 가까운 가이드 사용
-      if (!nextGuide && routeGuides.length > 0) {
-        for (const guide of routeGuides) {
-          const dist = calculateDistance(coord.latitude, coord.longitude, guide.y, guide.x);
-          if (dist < minDistance) {
-            minDistance = dist;
-            nextGuide = guide;
-          }
-        }
-      }
-
-      // 가이드가 있으면 안내, 없으면 목적지까지 직진
-      if (nextGuide && minDistance < 1000) {
-        // 1km 이내의 가이드만 안내
-        setCurrentInstruction(getInstructionFromGuide(nextGuide, minDistance));
-      } else if (destination) {
-        const destCoord = getCoordinateFromPlace(destination);
-        const remainingDist = calculateDistance(
-          coord.latitude,
-          coord.longitude,
-          destCoord.latitude,
-          destCoord.longitude
-        );
-        if (remainingDist > 0) {
-          setCurrentInstruction(`${remainingDist}m 앞까지 직진입니다`);
-        }
+      let nextGuide = routeGuides.find(g => g.road_index > closestIdx);
+      if (nextGuide) {
+        const dist = calculateDistance(coord.latitude, coord.longitude, nextGuide.y, nextGuide.x);
+        if (dist < 1000) setCurrentInstruction(getInstructionFromGuide(nextGuide, dist));
       }
     },
     [routeGuides, routePath, destination, getCoordinateFromPlace]
@@ -1114,16 +902,12 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
 
   const rerouteIfNecessary = useCallback(
     async (coord: Coordinate) => {
-      if (!destination || routePath.length === 0 || isRecalculatingRoute) {
-        return;
-      }
+      if (!destination || routePath.length === 0 || isRecalculatingRoute) return;
+
       const minDistance = getClosestDistanceToPath(coord, routePath);
       const remaining = calculateRemainingDistance(coord, destination);
-      if (remaining !== null) {
-        setDistance(remaining);
-      }
+      if (remaining !== null) setDistance(remaining);
 
-      // 안내 문구 업데이트
       updateNavigationInstruction(coord);
 
       if (minDistance > ROUTE_DEVIATION_THRESHOLD) {
@@ -1131,9 +915,7 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
         setIsRecalculatingRoute(true);
         try {
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        } catch {
-          // ignore haptics failure
-        }
+        } catch {}
 
         try {
           await buildRouteBetween(coord, destination);
@@ -1164,48 +946,27 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
           setLocationLabel("위치 권한 필요");
           return;
         }
-
-        const { coords } = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-
-        const newCoord = {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-        };
+        const { coords } = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const newCoord = { latitude: coords.latitude, longitude: coords.longitude };
         setCurrentCoordinate(newCoord);
-        if (destination) {
-          await rerouteIfNecessary(newCoord);
-        }
+
+        if (destination) await rerouteIfNecessary(newCoord);
 
         if (webViewRef.current) {
           webViewRef.current.postMessage(
-            JSON.stringify({
-              type: "UPDATE_LOCATION",
-              payload: { ...newCoord, moveMap },
-            })
+            JSON.stringify({ type: "UPDATE_LOCATION", payload: { ...newCoord, moveMap } })
           );
         }
 
         const [result] = await Location.reverseGeocodeAsync(newCoord);
         if (result) {
-          // 상세 주소 조합: 시/도 + 시/군/구 + 읍/면/동 + 상세주소(name)
-          const parts = [result.region, result.city, result.district, result.street, result.name].filter(
-            (part): part is string => !!part
-          );
-
-          // 중복 제거
+          const parts = [result.region, result.city, result.district, result.street, result.name].filter(Boolean);
           const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
-
           const addressText = uniqueParts.join(" ");
           setLocationLabel(addressText || "현재 위치");
-
-          // 처음 위치를 불러왔을 때만 읽기
-          if (!hasReadInitialLocation && addressText) {
-            setHasReadInitialLocation(true);
-          }
+          if (!hasReadInitialLocation && addressText) setHasReadInitialLocation(true);
         }
-      } catch (error) {
+      } catch {
         setLocationLabel("위치 불러오기 실패");
       } finally {
         setIsLocating(false);
@@ -1219,33 +980,25 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
   }, [requestLocation]);
 
   useEffect(() => {
-    let headingSubscription: Location.LocationSubscription | null = null;
+    if (isMapReady) {
+      requestLocation(true);
+      setIsMapReady(false);
+    }
+  }, [isMapReady, requestLocation]);
 
-    const startHeadingWatch = async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== "granted") {
-          return;
-        }
-
-        headingSubscription = await Location.watchHeadingAsync(location => {
-          if (location.trueHeading >= 0) {
-            setHeading(location.trueHeading);
-          } else if (location.magHeading >= 0) {
-            setHeading(location.magHeading);
-          }
+  useEffect(() => {
+    let sub: Location.LocationSubscription | null = null;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === "granted") {
+        sub = await Location.watchHeadingAsync(loc => {
+          const h = loc.trueHeading >= 0 ? loc.trueHeading : loc.magHeading;
+          if (h >= 0) setHeading(h);
         });
-      } catch {
-        // ignore
       }
-    };
-
-    startHeadingWatch();
-
+    })();
     return () => {
-      if (headingSubscription) {
-        headingSubscription.remove();
-      }
+      sub?.remove();
     };
   }, []);
 
@@ -1268,105 +1021,48 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
           easing: Easing.inOut(Easing.quad),
           useNativeDriver: true,
         }),
-        Animated.timing(pulseAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
       ])
     );
     loop.start();
-    return () => {
-      loop.stop();
-    };
+    return () => loop.stop();
   }, [pulseAnim]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isPlaying) {
-        requestLocation(false);
-      }
+      if (isPlaying) requestLocation(false);
     }, 5000);
     return () => clearInterval(interval);
   }, [requestLocation, isPlaying]);
 
   useEffect(() => {
-    if (!webViewRef.current) {
-      return;
-    }
-    webViewRef.current.postMessage(
-      JSON.stringify({
-        type: "SET_NAVIGATION_STATE",
-        payload: { isNavigating: isPlaying },
-      })
+    webViewRef.current?.postMessage(
+      JSON.stringify({ type: "SET_NAVIGATION_STATE", payload: { isNavigating: isPlaying } })
     );
   }, [isPlaying]);
 
   useEffect(() => {
-    if (!webViewRef.current || heading === null) {
-      return;
-    }
-    webViewRef.current.postMessage(
-      JSON.stringify({
-        type: "UPDATE_HEADING",
-        payload: heading,
-      })
-    );
+    if (heading !== null) webViewRef.current?.postMessage(JSON.stringify({ type: "UPDATE_HEADING", payload: heading }));
   }, [heading]);
 
   const overlayAnimationStyle = {
     opacity: uiIntro,
-    transform: [
-      {
-        translateY: uiIntro.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-12, 0],
-        }),
-      },
-    ],
+    transform: [{ translateY: uiIntro.interpolate({ inputRange: [0, 1], outputRange: [-12, 0] }) }],
   };
-
   const quickInfoAnimationStyle = {
     opacity: uiIntro,
-    transform: [
-      {
-        translateY: uiIntro.interpolate({
-          inputRange: [0, 1],
-          outputRange: [-6, 0],
-        }),
-      },
-    ],
+    transform: [{ translateY: uiIntro.interpolate({ inputRange: [0, 1], outputRange: [-6, 0] }) }],
   };
-
   const floatingGroupStyle = {
     opacity: uiIntro,
-    transform: [
-      {
-        translateY: uiIntro.interpolate({
-          inputRange: [0, 1],
-          outputRange: [30, 0],
-        }),
-      },
-    ],
+    transform: [{ translateY: uiIntro.interpolate({ inputRange: [0, 1], outputRange: [30, 0] }) }],
+  };
+  const pulseStyle = {
+    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
+    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.8] }) }],
   };
 
-  const pulseStyle = {
-    opacity: pulseAnim.interpolate({
-      inputRange: [0, 1],
-      outputRange: [0.35, 0],
-    }),
-    transform: [
-      {
-        scale: pulseAnim.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 1.8],
-        }),
-      },
-    ],
-  };
-  // TTS로 읽을 텍스트 생성
   const mapScreenText = useMemo(() => {
-    // 목적지가 설정되었을 때만 읽기 (한 번만)
     if (destination && distance !== null && !hasReadDestination) {
       return `지도 화면입니다. 현재 위치는 ${locationLabel}입니다. 목적지는 ${destination.place_name}이며, 약 ${distance}미터 떨어져 있습니다.`;
     } else if (
@@ -1376,23 +1072,18 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
       !destination &&
       !hasReadDestination
     ) {
-      // 처음 위치를 불러왔을 때만 읽기 (목적지가 없을 때, 한 번만)
       return `지도 화면입니다. 현재 위치는 ${locationLabel}입니다.`;
     }
     return "";
   }, [locationLabel, destination, distance, hasReadInitialLocation, hasReadDestination]);
 
-  // 목적지가 설정되었을 때 플래그 업데이트
   useEffect(() => {
-    if (destination && distance !== null && !hasReadDestination) {
-      setHasReadDestination(true);
-    }
+    if (destination && distance !== null && !hasReadDestination) setHasReadDestination(true);
   }, [destination, distance, hasReadDestination]);
 
-  // 화면 정보 읽기 (목적지가 설정되거나 처음 위치를 불러왔을 때만)
   useScreenReader(mapScreenText, { delay: 800, skipIfEmpty: true });
 
-  if (!KAKAO_MAP_KEY) {
+  if (!KAKAO_JAVASCRIPT_KEY) {
     return (
       <Container>
         <MissingKeyContainer>
@@ -1401,14 +1092,14 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
             weight="bold"
             style={{ marginBottom: 8 }}
           >
-            카카오맵 API Key가 필요합니다
+            Kakao API Key가 필요합니다
           </CustomText>
           <CustomText
             size={14}
             color="#666666"
             style={{ textAlign: "center" }}
           >
-            .env 파일 설정을 확인해주세요.
+            .env 파일의 EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY를 확인해주세요.
           </CustomText>
         </MissingKeyContainer>
       </Container>
@@ -1422,11 +1113,22 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
           ref={webViewRef}
           originWhitelist={["*"]}
           source={{ html: mapTemplate, baseUrl: "http://localhost" }}
-          javaScriptEnabled
-          domStorageEnabled
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          mixedContentMode="always"
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           onMessage={handleWebViewMessage}
+          startInLoadingState={true}
+          renderLoading={() => (
+            <ActivityIndicator
+              style={{ position: "absolute", top: "50%", left: "50%" }}
+              size="large"
+              color="#68D0C6"
+            />
+          )}
         />
 
         <OverlayContainer style={{ paddingTop: insets.top + 12 }}>
@@ -1577,7 +1279,6 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
           </SecondaryFloatingWrapper>
         </FloatingActionGroup>
 
-        {/* MapBottomSheet가 올라왔을 때의 블러 처리 */}
         {isMapBlurred && !showPlaceDetail && isPlaying && (
           <MapOverlay
             intensity={10}
@@ -1607,44 +1308,35 @@ export const Map = ({ onNavigateToReport }: { onNavigateToReport?: () => void })
         )}
 
         {isPlaying && !showPlaceDetail && (
-          <>
-            {/* 안내 중일 때는 블러 처리하지 않음 (지도 봐야함) 
-                만약 안내 중에도 바텀시트를 위로 올렸을 때만 블러하고 싶다면 
-                MapBottomSheet 내부에서 상태를 관리해서 콜백으로 알려줘야 함.
-                현재 요청은 "바텀시트가 올라올 때"이므로, PlaceDetailSheet가 떴을 때를 의미하는 것으로 보임.
-                MapBottomSheet는 항상 떠있는 상태(Peek)이므로 기본적으로 블러 처리하지 않음.
-            */}
-            <BottomSheetWrapper>
-              <MapBottomSheet
-                destination={destination?.place_name || "목적지를 검색해 주세요"}
-                instruction={
-                  isRecalculatingRoute
-                    ? "경로를 재탐색하고 있어요"
-                    : currentInstruction ||
-                      (distance ? `${distance}m 앞까지 직진입니다` : "목적지를 검색해 설정해주세요")
-                }
-                isPlaying={isPlaying}
-                distance={distance || undefined}
-                isRecalculating={isRecalculatingRoute}
-                hasDeviation={hasRouteDeviation}
-                currentCoordinate={currentCoordinate}
-                destinationCoordinate={destination ? getCoordinateFromPlace(destination) : undefined}
-                heading={heading}
-                onClose={() => {
-                  setIsPlaying(false);
-                  setDestination(null);
-                  setRoutePath([]);
-                  setRouteGuides([]);
-                  setCurrentInstruction("");
-                  setHasRouteDeviation(false);
-                  setIsRecalculatingRoute(false);
-                }}
-                onReportDanger={onNavigateToReport}
-                routePath={routePath}
-                onBlurMap={setIsMapBlurred}
-              />
-            </BottomSheetWrapper>
-          </>
+          <BottomSheetWrapper>
+            <MapBottomSheet
+              destination={destination?.place_name || "목적지를 검색해 주세요"}
+              instruction={
+                isRecalculatingRoute
+                  ? "경로를 재탐색하고 있어요"
+                  : currentInstruction || (distance ? `${distance}m 앞까지 직진입니다` : "목적지를 검색해 설정해주세요")
+              }
+              isPlaying={isPlaying}
+              distance={distance || undefined}
+              isRecalculating={isRecalculatingRoute}
+              hasDeviation={hasRouteDeviation}
+              currentCoordinate={currentCoordinate}
+              destinationCoordinate={destination ? getCoordinateFromPlace(destination) : undefined}
+              heading={heading}
+              onClose={() => {
+                setIsPlaying(false);
+                setDestination(null);
+                setRoutePath([]);
+                setRouteGuides([]);
+                setCurrentInstruction("");
+                setHasRouteDeviation(false);
+                setIsRecalculatingRoute(false);
+              }}
+              onReportDanger={onNavigateToReport}
+              routePath={routePath}
+              onBlurMap={setIsMapBlurred}
+            />
+          </BottomSheetWrapper>
         )}
         {isSearchVisible && (
           <MapSearch
