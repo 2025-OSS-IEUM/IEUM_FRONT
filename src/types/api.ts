@@ -91,6 +91,13 @@ export interface ReportResponse {
   createdAt: string;
 }
 
+export interface RerouteRequest {
+  current_lat: number;
+  current_lon: number;
+  dest_lat: number;
+  dest_lon: number;
+}
+
 export interface RoutePoint {
   lat: number;
   lon: number;
@@ -142,7 +149,7 @@ export interface SignupRequest {
   password: string;
   passwordConfirm: string;
   name?: string | null;
-  phone: string;
+  phone?: string;
   disabilityType: DisabilityType;
   consent: ConsentCreate;
 }

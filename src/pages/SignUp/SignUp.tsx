@@ -334,13 +334,13 @@ export const SignUp = ({ onNavigateBack, onSignUpSuccess }: SignUpProps) => {
         setIsLoading(true);
 
         // 요청 데이터를 명시적으로 정리하여 서버에 전송
-        // SignupRequest 스펙:
+        // SignupRequest 스펙 (OpenAPI 문서 기준):
         // - username: string (4-20자) - required
         // - email: string (email format) - required
         // - password: string (최소 8자) - required
         // - passwordConfirm: string - required
         // - name: string (1-50자) OR null - required (null 허용)
-        // - phone: string - required (실제 서버가 요구함)
+        // - phone: string - required (서버에서 요구)
         // - disabilityType: DisabilityType enum - required
         // - consent: ConsentCreate { terms: boolean, privacy: boolean } - required
         // name이 빈 문자열이면 null로 전송 (OpenAPI 스펙: 1-50자 또는 null)

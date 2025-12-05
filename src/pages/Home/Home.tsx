@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Animated } from "react-native";
 import styled from "styled-components/native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -208,27 +208,19 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
     try {
       const startDate = new Date(createdAt);
       const today = new Date();
-      
+
       // 시간 부분을 제거하고 날짜만 비교 (시간대 고려)
-      const startDateOnly = new Date(
-        startDate.getFullYear(),
-        startDate.getMonth(),
-        startDate.getDate()
-      );
-      const todayOnly = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate()
-      );
-      
+      const startDateOnly = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
       // 날짜 차이 계산 (밀리초 단위)
       const diffTime = todayOnly.getTime() - startDateOnly.getTime();
       // 일 단위로 변환
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
+
       // 최소 1일부터 시작 (가입일 당일도 1일로 계산)
       const days = Math.max(1, diffDays + 1);
-      
+
       console.log("[Home] 날짜 계산:", {
         createdAt,
         startDate: startDateOnly.toISOString(),
@@ -236,7 +228,7 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
         diffDays,
         calculatedDays: days,
       });
-      
+
       return days;
     } catch (error) {
       console.error("[Home] 날짜 계산 오류:", error);
@@ -300,11 +292,14 @@ export const Home = ({ onNavigateToReportDetails, onNavigateToReport }: HomeProp
 
   // 가입일 - API에서 가져온 값 사용
 
-  // TTS로 읽을 텍스트 생성
-  const homeScreenText = `이음이 홈 화면입니다. 이어진지 ${daysConnected}일 됐어요.`;
+  // TTS로 읽을 텍스트 생성 (메모이제이션하여 불필요한 재생성 방지)
+  const homeScreenText = useMemo(() => `이음이 홈 화면입니다. 이어진지 ${daysConnected}일 됐어요.`, [daysConnected]);
+
+  // TTS 옵션을 메모이제이션하여 무한 루프 방지
+  const screenReaderOptions = useMemo(() => ({ delay: 500, skipIfEmpty: true }), []);
 
   // 화면 로드 시 한 번만 읽기
-  useScreenReader(homeScreenText, { delay: 500, skipIfEmpty: true });
+  useScreenReader(homeScreenText, screenReaderOptions);
 
   // 강아지 터치 시 경험치 증가
   const handleDogTouch = () => {

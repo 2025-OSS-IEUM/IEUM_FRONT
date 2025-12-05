@@ -201,9 +201,6 @@ export const MapSearch = ({
   // 자동완성: 검색어 변경 시 debounce 적용 (실제로 변경되었을 때만 검색)
   useEffect(() => {
     const trimmedKeyword = keyword.trim();
-    if (__DEV__) {
-      console.log("[MapSearch] keyword changed:", trimmedKeyword);
-    }
 
     // 검색어가 실제로 변경되지 않았으면 검색하지 않음
     if (trimmedKeyword === lastSearchKeywordRef.current) {
@@ -239,9 +236,6 @@ export const MapSearch = ({
 
   const handleSearch = () => {
     const trimmedKeyword = keyword.trim();
-    if (__DEV__) {
-      console.log("[MapSearch] handleSearch submit:", trimmedKeyword);
-    }
     if (trimmedKeyword.length > 0) {
       // debounce 타이머가 있다면 취소하고 즉시 검색
       if (debounceTimerRef.current) {
