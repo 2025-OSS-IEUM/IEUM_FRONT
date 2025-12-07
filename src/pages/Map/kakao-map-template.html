@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <style>
+      html,
+      body,
+      #map {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background-color: #f5f7fa;
+      }
+    </style>
+    <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=EXPO_PUBLIC_KAKAO_JAVASCRIPT_KEY&autoload=false&libraries=services"></script>
+  </head>
+  <body>
+    <div id="map"></div>
+    <script>
+      // RN 통신 유틸
+      function sendToRN(type, payload) {
+        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({ type: type, payload: payload })
+          );
+        }
+      }
+
+      // 에러 핸들링
+      window.addEventListener("error", function (event) {
+        sendToRN("KAKAO_ERROR", event.message || "Unknown script error");
+      });
+
+      // 지도 객체
+      var map = null;
+      var currentMarker = null;
+      var currentCircle = null;
+      var placesService = null;
+
+      // 초기화
+      kakao.maps.load(function () {
+        try {
+          var container = document.getElementById("map");
+          var options = {
+            center: new kakao.maps.LatLng(36.362238, 127.340214),
+            level: 3,
+          };
+          map = new kakao.maps.Map(container, options);
+          placesService = new kakao.maps.services.Places();
+          sendToRN("KAKAO_READY", { level: map.getLevel() });
+        } catch (error) {
+          sendToRN("KAKAO_ERROR", error.message);
+        }
+      });
+
+      // RN 메시지 수신
+      document.addEventListener("message", function (event) {
+        handleMessage(event.data);
+      });
+      window.addEventListener("message", function (event) {
+        handleMessage(event.data);
+      });
+
+      function handleMessage(raw) {
+        try {
+          var data = typeof raw === "string" ? JSON.parse(raw) : raw;
+          
+          if (data.type === "UPDATE_LOCATION") {
+            var lat = data.payload.latitude;
+            var lng = data.payload.longitude;
+            var moveLatLon = new kakao.maps.LatLng(lat, lng);
+
+            if (map) {
+              map.setCenter(moveLatLon);
+
+              // 마커 업데이트
+              if (currentMarker) {
+                currentMarker.setPosition(moveLatLon);
+              } else {
+                var imageSrc = "https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png"; 
+                var imageSize = new kakao.maps.Size(64, 69); 
+                var imageOption = {offset: new kakao.maps.Point(27, 69)}; 
+                var markerImage = new kakao.maps.MarkerImage(imageSrc, imageSize, imageOption);
+
+                currentMarker = new kakao.maps.Marker({
+                  position: moveLatLon,
+                  image: markerImage
+                });
+                currentMarker.setMap(map);
+              }
+
+              // 반경 원 업데이트
+              if (currentCircle) {
+                 currentCircle.setPosition(moveLatLon); 
+                 // Circle은 setPosition이 없으므로 새로 그려야 함
+                 currentCircle.setMap(null);
+              }
+              
+              currentCircle = new kakao.maps.Circle({
+                center: moveLatLon,
+                radius: 50,
+                strokeWeight: 1,
+                strokeColor: '#0076EF',
+                strokeOpacity: 0.1,
+                strokeStyle: 'solid',
+                fillColor: '#0076EF',
+                fillOpacity: 0.1
+              });
+              currentCircle.setMap(map);
+            }
+            return;
+          }
+
+          if (data.type === "SEARCH_KEYWORD") {
+            handleKeywordSearch(data.payload);
+            return;
+          }
+        } catch (e) {
+          sendToRN("DEBUG", "Message parse error: " + e.message);
+        }
+      }
+
+      function handleKeywordSearch(keyword) {
+        if (!keyword || typeof keyword !== "string") {
+          sendToRN("SEARCH_RESULT", []);
+          return;
+        }
+
+        var trimmedKeyword = keyword.trim();
+        if (!trimmedKeyword) {
+          sendToRN("SEARCH_RESULT", []);
+          return;
+        }
+
+        if (!placesService) {
+          placesService = new kakao.maps.services.Places();
+        }
+
+        placesService.keywordSearch(trimmedKeyword, function (result, status) {
+          if (status === kakao.maps.services.Status.OK) {
+            var normalized = result.map(function (place) {
+              return {
+                id: place.id || place.place_id || place.phone || place.address_name + "_" + place.x + "_" + place.y,
+                place_name: place.place_name || "",
+                address_name: place.address_name || "",
+                road_address_name: place.road_address_name || "",
+                x: place.x || "",
+                y: place.y || "",
+              };
+            });
+            sendToRN("SEARCH_RESULT", normalized);
+            return;
+          }
+
+          if (status === kakao.maps.services.Status.ZERO_RESULT) {
+            sendToRN("SEARCH_RESULT", []);
+            return;
+          }
+
+          sendToRN("KAKAO_ERROR", "Keyword search failed: " + status);
+          sendToRN("SEARCH_RESULT", []);
+        });
+      }
+    </script>
+  </body>
+</html>
+
